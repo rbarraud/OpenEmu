@@ -26,14 +26,15 @@
 
 #import <Cocoa/Cocoa.h>
 #import <CoreAudio/CoreAudio.h>
-#import <OpenEmuBase/OpenEmuBase.h>
+#import <OpenEmuSystem/OpenEmuSystem.h>
+
+@class OEEvent;
 
 @protocol OEGameCoreHelper <NSObject>
 
 - (void)setVolume:(CGFloat)value;
 - (void)setPauseEmulation:(BOOL)pauseEmulation;
 - (void)setAudioOutputDeviceID:(AudioDeviceID)deviceID;
-- (void)setDrawSquarePixels:(BOOL)drawSquarePixels;
 
 - (void)setupEmulationWithCompletionHandler:(void(^)(IOSurfaceID surfaceID, OEIntSize screenSize, OEIntSize aspectSize))handler;
 - (void)startEmulationWithCompletionHandler:(void(^)(void))handler;
@@ -44,13 +45,40 @@
 - (void)loadStateFromFileAtPath:(NSString *)fileName completionHandler:(void (^)(BOOL success, NSError *error))block;
 
 - (void)setCheat:(NSString *)cheatCode withType:(NSString *)type enabled:(BOOL)enabled;
+- (void)setDisc:(NSUInteger)discNumber;
+
+- (void)handleMouseEvent:(OEEvent *)event;
+
+- (void)setHandleEvents:(BOOL)handleEvents;
+- (void)setHandleKeyboardEvents:(BOOL)handleKeyboardEvents;
+- (void)systemBindingsDidSetEvent:(OEHIDEvent *)event forBinding:(__kindof OEBindingDescription *)bindingDescription playerNumber:(NSUInteger)playerNumber;
+- (void)systemBindingsDidUnsetEvent:(OEHIDEvent *)event forBinding:(__kindof OEBindingDescription *)bindingDescription playerNumber:(NSUInteger)playerNumber;
 
 @end
 
-@protocol OEGameCoreDisplayHelper <NSObject>
+@protocol OEGameCoreOwner <NSObject>
+
+- (void)saveState;
+- (void)loadState;
+- (void)quickSave;
+- (void)quickLoad;
+- (void)toggleFullScreen;
+- (void)toggleAudioMute;
+- (void)volumeDown;
+- (void)volumeUp;
+- (void)stopEmulation;
+- (void)resetEmulation;
+- (void)toggleEmulationPaused;
+- (void)takeScreenshot;
+- (void)fastForwardGameplay:(BOOL)enable;
+- (void)rewindGameplay:(BOOL)enable;
+- (void)stepGameplayFrameForward;
+- (void)stepGameplayFrameBackward;
 
 - (void)setEnableVSync:(BOOL)enable;
-- (void)setScreenSize:(OEIntSize)newScreenSize withIOSurfaceID:(IOSurfaceID)newSurfaceID;
 - (void)setAspectSize:(OEIntSize)newAspectSize;
+- (void)setScreenSize:(OEIntSize)newScreenSize withIOSurfaceID:(IOSurfaceID)newSurfaceID;
+- (void)setScreenSize:(OEIntSize)newScreenSize aspectSize:(OEIntSize)newAspectSize withIOSurfaceID:(IOSurfaceID)newSurfaceID;
+- (void)setDiscCount:(NSUInteger)discCount;
 
 @end

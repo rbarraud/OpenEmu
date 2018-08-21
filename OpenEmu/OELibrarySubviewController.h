@@ -24,8 +24,10 @@
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
-#import "OELibraryController.h"
+@import Foundation;
+
+@class OELibraryController;
+@class OEDBGame;
 
 /* NOTE:
  * If the sidebar changes selection and the selected item is suitable for a Library Subview Controller it will be set as representedObject 
@@ -39,14 +41,9 @@
  */
 
 @protocol OELibrarySubviewController <NSObject>
-#pragma mark - State Handling
-- (id)encodeCurrentState;
-- (void)restoreState:(id)state;
 
 @optional
-#pragma mark - Library Handling
-- (void)setLibraryController:(OELibraryController*)controller;
-- (OELibraryController*)libraryController;
+@property (nonatomic, weak) OELibraryController *libraryController;
+@property (readonly) NSArray <OEDBGame *> *selectedGames;
 
-- (NSArray*)selectedGames;
 @end

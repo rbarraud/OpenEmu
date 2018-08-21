@@ -39,4 +39,15 @@
             : @"Atari 2600");
 }
 
+- (OEFileSupport)canHandleFile:(__kindof OEFile *)file
+{
+    if(![file.fileExtension isEqualToString:@"bin"])
+        return OEFileSupportUncertain;
+
+    if(file.fileSize < 2097152)
+        return OEFileSupportUncertain;
+    
+    return OEFileSupportNo;
+}
+
 @end

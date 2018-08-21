@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2012, OpenEmu Team
+ Copyright (c) 2016, OpenEmu Team
 
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -27,8 +27,13 @@
 #import "OEThemeTextAttributes.h"
 #import "NSColor+OEAdditions.h"
 
-#pragma mark -
-#pragma mark Theme font attributes
+#pragma mark - Magic font tokens
+
+static NSString * const OESystemFontFamilyMagicToken      = @"$SYSTEM_FONT_FAMILY";
+static NSString * const OEMonospacedDigitSystemFontFamily = @"$MONOSPACED_DIGIT_SYSTEM_FONT_FAMILY";
+static NSString * const OELabelFontFamilyMagicToken       = @"$LABEL_FONT_FAMILY";
+
+#pragma mark - Theme font attributes
 
 static NSString * const OEThemeFontForegroundColorAttributeName = @"Color";
 static NSString * const OEThemeFontBackgroundColorAttributeName = @"Background Color";
@@ -37,52 +42,57 @@ static NSString * const OEThemeFontFamilyAttributeName          = @"Family";
 static NSString * const OEThemeFontSizeAttributeName            = @"Size";
 static NSString * const OEThemeFontWeightAttributeName          = @"Weight";
 static NSString * const OEThemeFontTraitsAttributeName          = @"Traits";
+static NSString * const OEThemeFontAlignmentAttributeName       = @"Alignment";
+static NSString * const OEThemeFontLineBreakAttributeName       = @"Line Break";
+static NSString * const OEThemeFontBaselineOffsetAttributeName  = @"Baseline Offset";
 
-#pragma mark -
-#pragma mark Theme font shadow
+#pragma mark - Theme font shadow
 
 static NSString * const OEThemeFontShadowAttributeName          = @"Shadow";
 static NSString * const OEThemeShadowOffsetAttributeName        = @"Offset";
 static NSString * const OEThemeShadowBlurRadiusAttributeName    = @"Blur Radius";
 static NSString * const OEThemeShadowColorAttributeName         = @"Color";
 
-#pragma mark -
-#pragma mark Theme font traits
+#pragma mark - Theme font traits
 
 static NSString * const OEThemeFontTraitBoldName                = @"Bold";
 static NSString * const OEThemeFontTraitUnboldName              = @"Unbold";
 static NSString * const OEThemeFontTraitItalicName              = @"Italic";
 static NSString * const OEThemeFontTraitUnitalic                = @"Unitalic";
 
-#pragma mark -
-#pragma mark Implementation
+#pragma mark - Implementation
 
 static NSFontTraitMask _OENSFontTraitMaskFromString(NSString *string);
-static id _OEObjectFromDictionary(NSDictionary *dictionary, NSString *attributeName, Class expectedClass, id (^parse)(id obj));
+static id _OEObjectFromDictionary(NSDictionary <NSString *, id> *dictionary, NSString *attributeName, Class expectedClass, id (^parse)(id obj));
 
-// Parses a comma separated NSString of theme font traits
-NSFontTraitMask _OENSFontTraitMaskFromString(NSString *string)
-{
-    __block NSFontTraitMask mask = 0;
-
-    [[string componentsSeparatedByString:@","] enumerateObjectsUsingBlock:
-     ^ (NSString *obj, NSUInteger idx, BOOL *stop)
-     {
-         NSString *trait = [obj stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-
-         if([trait caseInsensitiveCompare:OEThemeFontTraitBoldName]        == NSOrderedSame) mask |= NSBoldFontMask;
-         else if([trait caseInsensitiveCompare:OEThemeFontTraitUnboldName] == NSOrderedSame) mask |= NSUnboldFontMask;
-         else if([trait caseInsensitiveCompare:OEThemeFontTraitItalicName] == NSOrderedSame) mask |= NSItalicFontMask;
-         else if([trait caseInsensitiveCompare:OEThemeFontTraitUnitalic]   == NSOrderedSame) mask |= NSUnitalicFontMask;
-     }];
-
+/// Parses a comma separated NSString of theme font traits
+NSFontTraitMask _OENSFontTraitMaskFromString(NSString *string) {
+    
+    NSFontTraitMask mask = 0;
+    NSCharacterSet *whitespace = NSCharacterSet.whitespaceCharacterSet;
+    
+    for (NSString *token in [string componentsSeparatedByString:@","]) {
+        
+        NSString *trimmedToken = [token stringByTrimmingCharactersInSet:whitespace];
+        
+        if ([trimmedToken caseInsensitiveCompare:OEThemeFontTraitBoldName] == NSOrderedSame) {
+            mask |= NSBoldFontMask;
+        } else if ([trimmedToken caseInsensitiveCompare:OEThemeFontTraitUnboldName] == NSOrderedSame) {
+            mask |= NSUnboldFontMask;
+        } else if ([trimmedToken caseInsensitiveCompare:OEThemeFontTraitItalicName] == NSOrderedSame) {
+            mask |= NSItalicFontMask;
+        } else if ([trimmedToken caseInsensitiveCompare:OEThemeFontTraitUnitalic] == NSOrderedSame) {
+            mask |= NSUnitalicFontMask;
+        }
+    }
+    
     return mask;
 }
 
-// This is a convenience function that allows us to retrieve an object from the specified dictionary
-id _OEObjectFromDictionary(NSDictionary *dictionary, NSString *attributeName, Class expectedClass, id (^parse)(id obj))
-{
-    id obj = [dictionary objectForKey:attributeName];
+/// This is a convenience function that allows us to retrieve an object from the specified dictionary
+id _OEObjectFromDictionary(NSDictionary <NSString *, id> *dictionary, NSString *attributeName, Class expectedClass, id (^parse)(id obj)) {
+    
+    id obj = dictionary[attributeName];
 
     // If the object already conforms to the requested class, then return the object, otherwise parse the object
     return ([obj isKindOfClass:expectedClass] ? obj : parse(obj));
@@ -90,66 +100,164 @@ id _OEObjectFromDictionary(NSDictionary *dictionary, NSString *attributeName, Cl
 
 @implementation OEThemeTextAttributes
 
-+ (id)parseWithDefinition:(NSDictionary *)definition
-{
++ (id)parseWithDefinition:(NSDictionary *)definition {
+
     // Parse the values from the new definition
-    NSColor *foregroundColor = _OEObjectFromDictionary(definition, OEThemeFontForegroundColorAttributeName, [NSColor class],
-                                                       ^ id (id color)
-                                                       {
-                                                           return ([color isKindOfClass:[NSString class]] ? (OENSColorFromString(color) ?: [NSColor blackColor]) : [NSColor blackColor]);
-                                                       });
+    NSColor *foregroundColor = _OEObjectFromDictionary(definition,
+        OEThemeFontForegroundColorAttributeName,
+        [NSColor class],
+        ^id (id color) {
+            return ([color isKindOfClass:[NSString class]] ? ([NSColor colorFromString:color] ?: NSColor.blackColor) : NSColor.blackColor);
+        });
 
-    NSColor *backgroundColor = _OEObjectFromDictionary(definition, OEThemeFontBackgroundColorAttributeName, [NSColor class],
-                                                       ^ id (id color)
-                                                       {
-                                                           return ([color isKindOfClass:[NSString class]] ? (OENSColorFromString(color) ?: nil) : nil);
-                                                       });
+    NSColor *backgroundColor = _OEObjectFromDictionary(definition,
+        OEThemeFontBackgroundColorAttributeName,
+        [NSColor class],
+        ^id (id color) {
+            return ([color isKindOfClass:[NSString class]] ? ([NSColor colorFromString:color] ?: nil) : nil);
+        });
 
-    NSShadow *shadow = _OEObjectFromDictionary(definition, OEThemeFontShadowAttributeName, [NSShadow class],
-                                               ^ id (id shadow)
-                                               {
-                                                   if(![shadow isKindOfClass:[NSDictionary class]]) return nil;
+    NSShadow *shadow = _OEObjectFromDictionary(definition,
+        OEThemeFontShadowAttributeName,
+        [NSShadow class],
+        ^id (NSDictionary <NSString *, id> *shadow) {
+            
+            if (![shadow isKindOfClass:[NSDictionary class]]) {
+                return nil;
+            }
+            
+            NSSize offset = NSSizeFromString(shadow[OEThemeShadowOffsetAttributeName]);
+            CGFloat blurRadius = ((NSNumber *)shadow[OEThemeShadowBlurRadiusAttributeName]).floatValue;
+            id color = shadow[OEThemeShadowColorAttributeName];
+            
+            if ([color isKindOfClass:[NSString class]]) {
+                color = ([NSColor colorFromString:color] ?: NSColor.blackColor);
+            } else if (![color isKindOfClass:[NSColor class]]) {
+                color = NSColor.blackColor;
+            }
+            
+            NSShadow *result = [[NSShadow alloc] init];
+            result.shadowOffset = offset;
+            result.shadowBlurRadius = blurRadius;
+            result.shadowColor = color;
+            
+            return result;
+        });
 
-                                                   NSSize  offset     = NSSizeFromString([shadow valueForKey:OEThemeShadowOffsetAttributeName]);
-                                                   CGFloat blurRadius = [[shadow valueForKey:OEThemeShadowBlurRadiusAttributeName] floatValue];
-                                                   id      color      = [shadow objectForKey:OEThemeShadowColorAttributeName];
+    NSString *familyAttribute = (definition[OEThemeFontFamilyAttributeName] ?: definition[OEThemeObjectValueAttributeName]);
+    CGFloat size = (((NSNumber *)definition[OEThemeFontSizeAttributeName] ?: @(12.0))).floatValue;
+    CGFloat weight = (((NSNumber *)definition[OEThemeFontWeightAttributeName] ?: @(5))). floatValue;
+    NSNumber *baselineOffset = definition[OEThemeFontBaselineOffsetAttributeName];
 
-                                                   if([color isKindOfClass:[NSString class]])      color = (OENSColorFromString(color) ?: [NSColor blackColor]);
-                                                   else if(![color isKindOfClass:[NSColor class]]) color = [NSColor blackColor];
+    NSFontTraitMask mask = [_OEObjectFromDictionary(definition,
+        OEThemeFontTraitsAttributeName,
+        [NSNumber class],
+        ^NSNumber *(id mask) {
+            if (![mask isKindOfClass:[NSString class]]) {
+                return @(0);
+            }
+            return @(_OENSFontTraitMaskFromString(mask));
+        }) unsignedIntegerValue];
 
-                                                   NSShadow *result = [[NSShadow alloc] init];
-                                                   [result setShadowOffset:offset];
-                                                   [result setShadowBlurRadius:blurRadius];
-                                                   [result setShadowColor:color];
+    NSFont *font;
+    if ([familyAttribute isEqualToString:OESystemFontFamilyMagicToken]) {
+        
+        NSFont *systemFont = [NSFont systemFontOfSize:size weight:weight];
+        font = [NSFontManager.sharedFontManager convertFont:systemFont toHaveTrait:mask];
+        
+    } else if ([familyAttribute isEqualToString:OEMonospacedDigitSystemFontFamily]) {
+        
+        NSFont *monospacedDigitSystemFont = [NSFont monospacedDigitSystemFontOfSize:size weight:weight];
+        font = [NSFontManager.sharedFontManager convertFont:monospacedDigitSystemFont toHaveTrait:mask];
+        
+    } else if ([familyAttribute isEqualToString:OELabelFontFamilyMagicToken]) {
+        
+        NSFont *labelFont = [NSFont labelFontOfSize:size];
+        font = [NSFontManager.sharedFontManager convertFont:labelFont toHaveTrait:mask];
+        
+    } else {
+        font = [NSFontManager.sharedFontManager fontWithFamily:familyAttribute traits:mask weight:weight size:size];
+    }
 
-                                                   return result;
-                                               });
+    NSMutableParagraphStyle *style = nil;
+    if ([definition objectForKey:OEThemeFontAlignmentAttributeName]) {
+        
+        if (style == nil) {
+            style = [[NSMutableParagraphStyle alloc] init];
+        }
 
-    NSString   *familyAttribute = ([definition valueForKey:OEThemeFontFamilyAttributeName]   ?: [definition objectForKey:OEThemeObjectValueAttributeName]);
-    CGFloat     size            = [([definition objectForKey:OEThemeFontSizeAttributeName]   ?: [NSNumber numberWithFloat:12.0]) floatValue];
-    NSUInteger  weight          = [([definition objectForKey:OEThemeFontWeightAttributeName] ?: [NSNumber numberWithInt:5]) intValue];
+        NSString *alignment = ((NSString *)definition[OEThemeFontAlignmentAttributeName]).lowercaseString;
+        NSTextAlignment textAlignment = NSNaturalTextAlignment;
 
-    NSFontTraitMask  mask = [_OEObjectFromDictionary(definition, OEThemeFontTraitsAttributeName, [NSNumber class],
-                                                     ^ id (id mask)
-                                                     {
-                                                         if(![mask isKindOfClass:[NSString class]]) return [NSNumber numberWithInt:0];
-                                                         return [NSNumber numberWithUnsignedInteger:_OENSFontTraitMaskFromString(mask)];
-                                                     }) unsignedIntegerValue];
+        if ([alignment isEqualToString:@"left"]) {
+            textAlignment = NSLeftTextAlignment;
+        } else if ([alignment isEqualToString:@"center"]) {
+            textAlignment = NSCenterTextAlignment;
+        } else if ([alignment isEqualToString:@"right"]) {
+            textAlignment = NSRightTextAlignment;
+        } else if ([alignment isEqualToString:@"justify"] || [alignment isEqualToString:@"justified"]) {
+            textAlignment = NSJustifiedTextAlignment;
+        } else if ([alignment isEqualToString:@"natural"]) {
+            textAlignment = NSNaturalTextAlignment;
+        }
 
-    NSFont *font = [[NSFontManager sharedFontManager] fontWithFamily:familyAttribute traits:mask weight:weight size:size];
+        style.alignment = textAlignment;
+    }
+
+    if (definition[OEThemeFontLineBreakAttributeName]) {
+        
+        if (style == nil) {
+            style = [[NSMutableParagraphStyle alloc] init];
+        }
+
+        style.allowsDefaultTighteningForTruncation = NO;
+        style.tighteningFactorForTruncation = 0.1;
+
+        NSString *modeString = ((NSString *)definition[OEThemeFontLineBreakAttributeName]).lowercaseString;
+        NSLineBreakMode mode = NSLineBreakByClipping;
+
+        if ([modeString isEqualToString:@"word wrap"]) {
+            mode = NSLineBreakByWordWrapping;
+        } else if ([modeString isEqualToString:@"char wrap"]) {
+            mode = NSLineBreakByCharWrapping;
+        } else if ([modeString isEqualToString:@"clip"]) {
+            mode = NSLineBreakByClipping;
+        } else if ([modeString isEqualToString:@"truncate head"]) {
+            mode = NSLineBreakByTruncatingHead;
+        } else if ([modeString isEqualToString:@"truncate middle"]) {
+            mode = NSLineBreakByTruncatingMiddle;
+        } else if ([modeString isEqualToString:@"truncate tail"]) {
+            mode = NSLineBreakByTruncatingTail;
+        }
+
+        style.lineBreakMode = mode;
+    }
 
     NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
-    if(font)            [attributes setValue:font            forKey:NSFontAttributeName];
-    if(shadow)          [attributes setValue:shadow          forKey:NSShadowAttributeName];
-    if(foregroundColor) [attributes setValue:foregroundColor forKey:NSForegroundColorAttributeName];
-    if(backgroundColor) [attributes setValue:backgroundColor forKey:NSBackgroundColorAttributeName];
+    if (font) {
+        attributes[NSFontAttributeName] = font;
+    }
+    if (shadow) {
+        attributes[NSShadowAttributeName] = shadow;
+    }
+    if (foregroundColor) {
+        attributes[NSForegroundColorAttributeName] = foregroundColor;
+    }
+    if (backgroundColor) {
+        attributes[NSBackgroundColorAttributeName] = backgroundColor;
+    }
+    if (style) {
+        attributes[NSParagraphStyleAttributeName] = style;
+    }
+    if (baselineOffset) {
+        attributes[NSBaselineOffsetAttributeName] = baselineOffset;
+    }
 
     return [attributes copy];
 }
 
-- (NSDictionary *)textAttributesForState:(OEThemeState)state
-{
-    return (NSDictionary *)[self objectForState:state];
+- (NSDictionary <NSString *, id> *)textAttributesForState:(OEThemeState)state {
+    return (NSDictionary <NSString *, id> *)[self objectForState:state];
 }
 
 @end

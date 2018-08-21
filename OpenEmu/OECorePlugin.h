@@ -24,7 +24,7 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
 #import "OEPlugin.h"
 
 @class OEGameCoreController;
@@ -37,9 +37,12 @@
 @property(readonly) NSImage  *icon;
 @property(readonly) NSString *bundleIdentifier;
 @property(readonly) NSArray  *systemIdentifiers;
+@property(readonly) NSArray *requiredFiles;
+@property(readonly) NSDictionary *coreOptions;
 
 + (OECorePlugin *)corePluginWithBundleAtPath:(NSString *)bundlePath;
 + (OECorePlugin *)corePluginWithBundleIdentifier:(NSString *)identifier;
 + (NSArray *)corePluginsForSystemIdentifier:(NSString *)systemIdentifier;
++ (NSArray *)requiredFiles;
 
 @end

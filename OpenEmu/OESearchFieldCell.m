@@ -26,9 +26,10 @@
 
 #import "OESearchFieldCell.h"
 #import "OEControl.h"
+#import "OETheme.h"
+#import "OEThemeImage.h"
+#import "OEThemeTextAttributes.h"
 
-@interface OESearchFieldFieldEditor : NSTextView
-@end
 
 @interface OESearchFieldCell ()
 {
@@ -36,20 +37,11 @@
 }
 - (void)updatePlaceholder;
 - (NSDictionary*)_textAttributes; // Apple Private Override
-@property OESearchFieldFieldEditor *fieldEditor;
 @property (nonatomic)  BOOL isEditing;
+@property OEThemeState lastState;
 @end
 
 @implementation OESearchFieldCell
-- (id)initImageCell:(NSImage *)image
-{
-    self = [super initImageCell:image];
-    if(self)
-    {
-        [self OE_commonInit];
-    }
-    return self;
-}
 
 - (id)initTextCell:(NSString *)aString
 {
@@ -78,9 +70,7 @@
 
     [self setIsEditing:NO];
 
-    OESearchFieldFieldEditor *fieldEditor =[[OESearchFieldFieldEditor alloc] initWithFrame:NSMakeRect(0, 0, 0, 14)];
-    [fieldEditor setFieldEditor:YES];
-    [self setFieldEditor:fieldEditor];
+    _lastState = [self OE_currentState];
 }
 
 - (void)updatePlaceholder
@@ -88,7 +78,7 @@
     NSString     *placeholder = [self placeholderString];
     NSDictionary *attributes  = [self _textAttributes];
 
-    NSAttributedString *attributedPlaceholder = [[NSAttributedString alloc] initWithString:placeholder?:@"Search" attributes:attributes];
+    NSAttributedString *attributedPlaceholder = [[NSAttributedString alloc] initWithString:placeholder?:NSLocalizedString(@"Search", @"") attributes:attributes];
     [self setPlaceholderAttributedString:attributedPlaceholder];
 }
 #pragma mark - Drawing
@@ -100,8 +90,10 @@
 
     // Right gap (cancel image)
     rect.size.width -= 23.0;
-
-    rect.size.height = 21.0;
+    
+    // Limit the text to the cell's bounds
+    rect.size.height = 14.0;
+    rect.origin.y += 3.0;
 
     return rect;
 }
@@ -113,15 +105,27 @@
     return rect;
 }
 
+- (NSRect)searchButtonRectForBounds:(NSRect)rect
+{
+    NSRect r = [super searchButtonRectForBounds:rect];
+
+    r.origin.x += 5.0;
+    if([self searchMenuTemplate])
+        r.size.width = 18.0;
+    else
+        r.size.width = 13.0;
+
+    return r;
+}
+
 - (void)drawWithFrame:(NSRect)cellFrame inView:(NSView *)controlView
 {
     if(_themed && _backgroundThemeImage)
     {
-        cellFrame.size.height = 21; // our searchfield is only 21px high (NSSearchField is 21px high)
+        cellFrame.size.height = 21; // our searchfield is only 21px high (NSSearchField is 22px high)
         [[_backgroundThemeImage imageForState:[self OE_currentState]] drawInRect:cellFrame fromRect:NSZeroRect operation:NSCompositeSourceOver fraction:1.0 respectFlipped:YES hints:nil];
     }
 
-    [self updatePlaceholder];
     [self drawInteriorWithFrame:cellFrame inView:controlView];
 }
 
@@ -153,27 +157,25 @@
     }
 }
 
-- (NSTextView *)fieldEditorForView:(NSView *)aControlView
-{
-    return [self fieldEditor];
-}
-
 - (NSText*)setUpFieldEditorAttributes:(NSText *)textObj
 {
-    if(_themed)
+    if (_themed)
     {
         NSTextView *fieldEditor = (NSTextView*)textObj;
 
         [fieldEditor setDrawsBackground:NO];
 
         OEThemeState currentState = [self OE_currentState] | OEThemeInputStateFocused;
-        NSDictionary *typingAttribtues = [[self themeTextAttributes] textAttributesForState:currentState];
-        [fieldEditor setTypingAttributes:typingAttribtues];
 
         NSDictionary *selectionAttributes = [[self selectedThemeTextAttributes] textAttributesForState:currentState];
         [fieldEditor setSelectedTextAttributes:selectionAttributes];
-        [fieldEditor setInsertionPointColor:[typingAttribtues objectForKey:@"NSColor"]];
+
+        NSDictionary *textAttributes = [[self themeTextAttributes] textAttributesForState:currentState];
+        [fieldEditor setInsertionPointColor:[textAttributes objectForKey:NSForegroundColorAttributeName]];
     }
+    else
+        [super setUpFieldEditorAttributes:textObj];
+    
     return textObj;
 }
 
@@ -191,16 +193,21 @@
     BOOL focused      = NO;
     BOOL windowActive = NO;
 
+    NSWindow *window = [[self controlView] window];
     if(((_stateMask & OEThemeStateAnyFocus) != 0) || ((_stateMask & OEThemeStateAnyWindowActivity) != 0))
     {
         // Set the focused, windowActive, and hover properties only if the state mask is tracking the button's focus, mouse hover, and window activity properties
-        NSWindow *window = [[self controlView] window];
-
-        focused      = self.isEditing || [window firstResponder] == [self controlView];
+        focused      = self.isEditing || [window firstResponder] == [self controlView] || [window firstResponder] == [window fieldEditor:NO forObject:self];
         windowActive = ((_stateMask & OEThemeStateAnyWindowActivity) != 0) && ([window isMainWindow] || ([window parentWindow] && [[window parentWindow] isMainWindow]));
     }
 
-    return [OEThemeObject themeStateWithWindowActive:windowActive buttonState:[self state] selected:NO enabled:[self isEnabled] focused:focused houseHover:[self isHovering] modifierMask:[NSEvent modifierFlags]] & _stateMask;
+    OEThemeState newState = [OEThemeObject themeStateWithWindowActive:windowActive buttonState:[self state] selected:NO enabled:[self isEnabled] focused:focused houseHover:[self isHovering] modifierMask:[NSEvent modifierFlags]] & _stateMask;
+    if(newState != _lastState)
+    {
+        _lastState = newState;
+        [self updatePlaceholder];
+    }
+    return newState;
 }
 
 - (BOOL)startTrackingAt:(NSPoint)startPoint inView:(NSView *)controlView
@@ -270,7 +277,6 @@
 {
     return (!_themed || _themeImage == nil ? [super image] : [_themeImage imageForState:[self OE_currentState]]);
 }
-
 
 - (void)OE_recomputeStateMask
 {
@@ -354,32 +360,6 @@
 {
     return [[self themeTextAttributes] textAttributesForState:[self OE_currentState]];
 }
+
 @end
 
-@interface NSTextView (ApplePrivate)
-- (void)_drawInsertionPointInRect:(NSRect)aRect color:(NSColor *)color;
-@end
-
-@implementation OESearchFieldFieldEditor
-
-- (void)drawRect:(NSRect)dirtyRect
-{
-    [[NSGraphicsContext currentContext] saveGraphicsState];
-
-    NSRect clipRect = [self bounds];
-    clipRect.origin.y += 3.0;
-    clipRect.size.height -= 3.0;
-
-    NSRectClip(clipRect);
-    [super drawRect:dirtyRect];
-
-    [[NSGraphicsContext currentContext] restoreGraphicsState];
-}
-
-- (void)_drawInsertionPointInRect:(NSRect)aRect color:(NSColor *)color
-{
-    aRect.size.height = 14;
-    aRect.origin.y    = 3;
-    [super _drawInsertionPointInRect:aRect color:color];
-}
-@end

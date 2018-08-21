@@ -25,7 +25,10 @@
  */
 
 #import "OEProgressIndicator.h"
-#import <Quartz/Quartz.h>
+#import "OETheme.h"
+#import "OEThemeImage.h"
+@import Quartz;
+
 @interface OEProgressIndicator ()
 {
     OEThemeImage *trackImage;
@@ -53,6 +56,11 @@
     return self;
 }
 
+- (BOOL)allowsVibrancy
+{
+    return false;
+}
+
 - (void)setCandyOffset:(float)candyOffset
 {
     if(candyOffset == _candyOffset) return;
@@ -70,8 +78,9 @@
     
     OEThemeState currentState = [self currentState];
     [[trackImage imageForState:currentState] drawInRect:trackRect fromRect:NSZeroRect operation:NSCompositeSourceOver fraction:1.0 respectFlipped:YES hints:nil];
-        
     [NSGraphicsContext saveGraphicsState];
+
+    [[NSGraphicsContext currentContext] setColorRenderingIntent:NSColorRenderingIntentDefault];
     
     NSRect maxCandyRect = [self candyRect];
     NSRectClip(maxCandyRect);
@@ -82,7 +91,6 @@
         candyRect.origin.x += NSWidth(candyRect);
     }
     [NSGraphicsContext restoreGraphicsState];
-    
     if([self doubleValue] != [self minValue])
     {
         NSRect progressRect = [self progressRect];

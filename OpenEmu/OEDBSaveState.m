@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2011, OpenEmu Team
+ Copyright (c) 2015, OpenEmu Team
  
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -29,14 +29,23 @@
 #import "OEDBRom.h"
 #import "OEDBGame.h"
 #import "OEDBSystem.h"
+#import "OEDBSystem+CoreDataProperties.h"
 #import "OECorePlugin.h"
-#import "NSURL+OELibraryAdditions.h"
 
-#define OESaveStateDataFile         @"State"
-#define OESaveStateScreenshotFile   @"ScreenShot"
-#define OESaveStateLatestVersion    @"1.0"
-NSString *const OESaveStateSuffix = @"oesavestate";
+#import "OpenEmu-Swift.h"
 
+NS_ASSUME_NONNULL_BEGIN
+
+// Preference keys
+NSString *const OESaveStateUseQuickSaveSlotsKey = @"UseQuickSaveSlots";
+
+// Required files
+NSString *const OESaveStateSuffix         = @"oesavestate";
+NSString *const OESaveStateDataFile       = @"State";
+NSString *const OESaveStateScreenshotFile = @"ScreenShot";
+NSString *const OESaveStateLatestVersion  = @"1.0";
+
+// Info.plist keys
 NSString *const OESaveStateInfoVersionKey           = @"Version";
 NSString *const OESaveStateInfoNameKey              = @"Name";
 NSString *const OESaveStateInfoDescriptionKey       = @"Description";
@@ -45,203 +54,207 @@ NSString *const OESaveStateInfoCoreIdentifierKey    = @"Core Identifier";
 NSString *const OESaveStateInfoCoreVersionKey       = @"Core Version";
 NSString *const OESaveStateInfoTimestampKey         = @"Timestamp";
 
-// NSString *const OESaveStateInfoCreationDateKey   = @"Creation Date";
-// NSString *const OESaveStateInfoBookmarkDataKey   = @"Bookmark Data";
-
+// Special name constants
 NSString *const OESaveStateSpecialNamePrefix    = @"OESpecialState_";
 NSString *const OESaveStateAutosaveName         = @"OESpecialState_auto";
 NSString *const OESaveStateQuicksaveName        = @"OESpecialState_quick";
 
-NSString *const OESaveStateUseQuickSaveSlotsKey = @"UseQuickSaveSlots";
-
 @implementation OEDBSaveState
 
-+ (OEDBSaveState *)saveStateWithURL:(NSURL *)url inContext:(NSManagedObjectContext *)context
++ (nullable instancetype)saveStateWithURL:(NSURL *)url inContext:(NSManagedObjectContext *)context
 {
+    NSURL *saveStateDirectoryURL = context.libraryDatabase.stateFolderURL;
+
+    // normalize URL for lookup
+    NSURL  *relativeURL = [url URLRelativeToURL:saveStateDirectoryURL];
+    NSString *urlString = [self OE_stringByRemovingTrailingSlash:relativeURL.relativeString];
+
+    // query core data
     NSFetchRequest *request = [NSFetchRequest fetchRequestWithEntityName:[self entityName]];
-    
-    NSString *absoluteString = [url absoluteString];
-    if([absoluteString characterAtIndex:[absoluteString length]-1] != '/')
+    request.predicate = [NSPredicate predicateWithFormat:@"location == %@", urlString];
+    NSArray *results = [context executeFetchRequest:request error:nil];
+    if([results count] > 1)
     {
-        absoluteString = [absoluteString stringByAppendingString:@"/"];
-    }
-    
-    NSPredicate *predicate  = [NSPredicate predicateWithFormat:@"location == %@", absoluteString];
-    [request setPredicate:predicate];
-    
-    return [[context executeFetchRequest:request error:nil] lastObject];
-}
-
-
-+ (instancetype)createObjectInContext:(NSManagedObjectContext *)context
-{
-    id result = [super createObjectInContext:context];
-    [result setTimestamp:[NSDate date]];
-	return result;
-}
-
-+ (id)createSaveStateWithURL:(NSURL *)url inContext:(NSManagedObjectContext *)context
-{
-    OEDBSaveState *newSaveState = [self createObjectInContext:context];
-    [newSaveState setLocation:[url absoluteString]];
-    if(![newSaveState readInfoPlist])
-    {
-        // setting path to nil so file won't be deleted in -remove
-        [newSaveState setLocation:nil];
-        [newSaveState remove];
-        newSaveState = nil;
+        NSLog(@"WARNING: Found several save states with the same URL!");
     }
 
+    return results.lastObject;
+}
+
++ (nullable instancetype)createSaveStateByImportingBundleURL:(NSURL *)url intoContext:(NSManagedObjectContext *)context
+{
+    return [self createSaveStateByImportingBundleURL:url intoContext:context copy:NO];
+}
+
++ (nullable instancetype)createSaveStateByImportingBundleURL:(NSURL *)url intoContext:(NSManagedObjectContext *)context copy:(BOOL)copyFlag
+{
+    // Check if state is already in database
+    OEDBSaveState *state = [self saveStateWithURL:url inContext:context];
+    if(state)
+    {
+        return state;
+    }
+
+    // Check if url points to valid Save State
+    NSString *fileName = [self OE_stringByRemovingTrailingSlash:url.lastPathComponent];
+    NSString *fileExtension = fileName.pathExtension.lowercaseString;
+
+    // Check url extension
+    if([fileExtension isNotEqualTo:@"oesavestate"])
+    {
+        DLog(@"SaveState %@ has wrong extension (%@)", url, fileExtension);
+        return nil;
+    }
+
+    // See if state and info.plist files are available
     NSError *error = nil;
+    NSURL *dataURL = [self OE_dataURLWithBundleURL:url];
+    NSURL *infoPlistURL = [self OE_infoPlistURLWithBundleURL:url];
 
-    //TODO: use validation here instead of save
-    if(newSaveState && ![newSaveState save])
+    if(![dataURL checkResourceIsReachableAndReturnError:&error])
     {
-        [newSaveState setLocation:nil];
-        [newSaveState remove];
-        newSaveState = nil;
-        DLog(@"State verification failed: %@ : %@", error, url);
-        [context save:nil];
+        DLog(@"SaveState %@ has no data file", url);
+        DLog(@"%@", error);
+        return nil;
     }
 
-    // state is saved in if statement above!
+    if(![infoPlistURL checkResourceIsReachableAndReturnError:&error])
+    {
+        DLog(@"SaveState %@ has no Info.plist file", url);
+        DLog(@"%@", error);
+        return nil;
+    }
 
-    return newSaveState;
+    // Create new object
+    NSURL *standardizedURL = url.standardizedURL;
+    if(copyFlag)
+    {
+        NSString *(^makeTempPath)(int i) = ^NSString*(int i){
+            NSString *fileName = @"SaveState.oesavestate";
+            if(i != 0)
+                fileName = [NSString stringWithFormat:@"SaveState %d.oesavestate", i];
+            return [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+        };
+
+        NSString *temporaryPath;
+        int i=0;
+        do
+            temporaryPath = makeTempPath(i++);
+        while ([[NSFileManager defaultManager] fileExistsAtPath:temporaryPath]);
+        NSURL *temporaryURL = [NSURL fileURLWithPath:temporaryPath];
+        [[NSFileManager defaultManager] copyItemAtURL:url toURL:temporaryURL error:nil];
+
+        standardizedURL = temporaryURL.standardizedURL;
+    }
+
+    state = [self createObjectInContext:context];
+    state.URL = standardizedURL;
+
+    // Try to read Info.plist
+    BOOL validBundle = [state readFromDisk];
+    if(!validBundle)
+    {
+        DLog(@"SaveState %@ seems invalid after further inspection!", url);
+        [state delete];
+        return nil;
+    }
+
+    BOOL didMove = [state moveToDefaultLocation];
+    if(!didMove)
+    {
+        DLog(@"SaveState %@ could not be moved!", url);
+        [state delete];
+        return nil;
+    }
+
+    [state save];
+    return state;
 }
 
-
-+ (id)createSaveStateNamed:(NSString *)name forRom:(OEDBRom *)rom core:(OECorePlugin *)core withFile:(NSURL *)stateFileURL inContext:(NSManagedObjectContext *)context
++ (nullable instancetype)createSaveStateNamed:(NSString *)name forRom:(OEDBRom *)rom core:(OECorePlugin *)core withFile:(NSURL *)stateFileURL inContext:(NSManagedObjectContext *)context
 {
-    OEDBSaveState *newSaveState = [self createObjectInContext:context];
-    [newSaveState setName:name];
-    [newSaveState setRom:rom];
-    [newSaveState setTimestamp:[NSDate date]];
+    NSURL *dataFileURL = stateFileURL.standardizedURL;
 
-    NSString *coreIdentifier = [core bundleIdentifier];
-    NSString *coreVersion = [core version];
-    [newSaveState setCoreIdentifier:coreIdentifier];
-    [newSaveState setCoreVersion:coreVersion];
-
-    if([name hasPrefix:OESaveStateSpecialNamePrefix])
+    // Check supplied values
+    if(![dataFileURL checkResourceIsReachableAndReturnError:nil])
     {
-        name = NSLocalizedString(name, @"Localized special save state name");
+        DLog(@"State file does not exist!");
+        return nil;
     }
 
-    NSError  *error              = nil;
-    NSString *fileName           = [NSURL validFilenameFromString:name];
-    OELibraryDatabase *database = [newSaveState libraryDatabase];
-    NSURL    *saveStateFolderURL = [database stateFolderURLForROM:rom];
-    NSURL    *saveStateURL       = [saveStateFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"%@.%@/", fileName, OESaveStateSuffix]];
-
-    saveStateURL = [saveStateURL uniqueURLUsingBlock:^NSURL *(NSInteger triesCount) {
-        return [saveStateFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"%@ %ld.%@/", fileName, triesCount, OESaveStateSuffix]];
-    }];
-
-    if(![newSaveState OE_createBundleAtURL:saveStateURL withStateFile:stateFileURL error:&error])
+    if(name == nil || name.length == 0)
     {
-        // TODO: remove temp files
-        NSLog(@"could not create state bundle at url: %@!", saveStateURL);
-        NSLog(@"%@", [error localizedDescription]);
-        [newSaveState delete];
-        [newSaveState save];
-
-        newSaveState = nil;
+        DLog(@"Invalid Save State name!");
+        return nil;
     }
 
-    [newSaveState save];
-    if(newSaveState)
+    if(rom == nil)
     {
-        NSManagedObjectContext *mainContext = [context parentContext];
-        [mainContext performBlock:^{
-            [mainContext save:nil];
-        }];
+        DLog(@"ROM is invalid!");
+        return nil;
     }
 
-    return newSaveState;
+    NSError *error      = nil;
+
+    NSString *temporaryName = [NSString stringWithFormat:@"org.openemu.openemu/SaveState.%@", OESaveStateSuffix];
+    NSString *temporaryPath = [NSTemporaryDirectory() stringByAppendingPathComponent:temporaryName];
+    [[NSFileManager defaultManager] createDirectoryAtPath:temporaryPath withIntermediateDirectories:YES attributes:nil error:nil];
+    NSURL *temporaryURL = [NSURL fileURLWithPath:temporaryPath isDirectory:NO];
+
+    OEDBSaveState *savestate = [OEDBSaveState createObjectInContext:context];
+    savestate.name = name;
+    savestate.rom = rom;
+    savestate.coreIdentifier = core.bundleIdentifier;
+    savestate.coreVersion = core.version;
+    savestate.URL = temporaryURL;
+
+    if(![[NSFileManager defaultManager] createDirectoryAtPath:temporaryURL.path withIntermediateDirectories:YES attributes:nil error:&error])
+    {
+        DLog(@"Could not create save state bundle!");
+        DLog(@"%@", error);
+
+        [savestate delete];
+        return nil;
+    }
+
+    if(![savestate writeToDisk])
+    {
+        DLog(@"Could not write Info.plist!");
+        [savestate delete];
+        return nil;
+    }
+
+    if(![savestate moveToDefaultLocation])
+    {
+        DLog(@"Could not move save state to default location!");
+        [savestate delete];
+        return nil;
+    }
+
+    if(![savestate replaceStateFileWithFile:dataFileURL])
+    {
+        DLog(@"Could not copy data file to bundle!");
+        [savestate delete];
+        return nil;
+    }
+
+    [savestate save];
+    return savestate;
 }
 
-- (BOOL)OE_createBundleAtURL:(NSURL *)bundleURL withStateFile:(NSURL *)stateFile error:(NSError **)error
++ (nullable instancetype)updateOrCreateStateWithURL:(NSURL *)url inContext:(NSManagedObjectContext *)context
 {
-    NSFileManager *fileManager         = [NSFileManager defaultManager];
-    NSDictionary  *directoryAttributes = @{};
-    if(![fileManager createDirectoryAtURL:bundleURL withIntermediateDirectories:YES attributes:directoryAttributes error:error])
+    OEDBSaveState *saveState = [self createSaveStateByImportingBundleURL:url intoContext:context];
+
+    [saveState readFromDisk];
+    [saveState moveToDefaultLocation];
+    [saveState save];
+
+    if(!saveState.isValid)
     {
-        return NO;
-    }
-
-    NSURL *stateURLInBundle = [bundleURL URLByAppendingPathComponent:OESaveStateDataFile];
-    if(![fileManager moveItemAtURL:stateFile toURL:stateURLInBundle error:error])
-    {
-        [fileManager removeItemAtURL:bundleURL error:nil];
-        return NO;
-    }
-
-    [[self managedObjectContext] performBlockAndWait:^{
-        [self setURL:bundleURL];
-    }];
-
-    if(![self writeInfoPlist])
-    {
-        [fileManager removeItemAtURL:stateFile error:nil];
-        [fileManager removeItemAtURL:bundleURL error:nil];
-
-        return NO;
-    }
-    
-    return YES;
-}
-
-+ (OEDBSaveState*)updateOrCreateStateWithURL:(NSURL *)url inContext:(NSManagedObjectContext *)context
-{
-    NSString *path = [url path];
-    NSRange range     = [path rangeOfString:@".oesavestate" options:NSCaseInsensitiveSearch];
-    if(range.location == NSNotFound) return nil;
-
-    OELibraryDatabase *database         = [OELibraryDatabase defaultDatabase];
-    NSFileManager     *defaultManager   = [NSFileManager defaultManager];
-    NSString          *saveStatePath    = [path substringToIndex:range.location+range.length];
-    NSURL             *originalStateUrl = [NSURL fileURLWithPath:saveStatePath];
-    NSURL             *stateURL         = originalStateUrl;
-    NSURL             *stateFolderURL   = [database stateFolderURL];
-
-    BOOL stateOutsideStateDir = ![originalStateUrl isSubpathOfURL:stateFolderURL];
-    if(stateOutsideStateDir)
-    {
-        NSString *currentFileName = [[stateURL lastPathComponent] stringByDeletingPathExtension];
-        NSString *extension       = [stateURL pathExtension];
-        stateURL = [stateURL uniqueURLUsingBlock:^NSURL *(NSInteger triesCount) {
-            return [stateFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"%@ %ld.%@", currentFileName, triesCount, extension]];
-        }];
-
-        if(![defaultManager copyItemAtURL:originalStateUrl toURL:stateURL error:nil])
-            return nil;
-    }
-
-    OEDBSaveState *saveState = [OEDBSaveState saveStateWithURL:stateURL inContext:context];
-    BOOL fileAvailable = [stateURL checkResourceIsReachableAndReturnError:nil];
-    if(fileAvailable)
-    {
-        if(saveState)
-        {
-            // update state info from plist
-            [saveState readInfoPlist];
-        }
-        else
-        {
-            // create new save state
-            saveState = [OEDBSaveState createSaveStateWithURL:stateURL inContext:context];
-        }
-    }
-    else
-    {
-        // file missing, delete state from db
-        [saveState remove];
-        [saveState save];
+        [saveState delete];
         saveState = nil;
     }
-
-    [saveState moveToDefaultLocation];
-    [context save:nil];
 
     return saveState;
 }
@@ -250,160 +263,323 @@ NSString *const OESaveStateUseQuickSaveSlotsKey = @"UseQuickSaveSlots";
 {
     return slot == 0 ? OESaveStateQuicksaveName:[NSString stringWithFormat:@"%@%ld", OESaveStateQuicksaveName, slot];
 }
-+ (NSString*)entityName
+
+#pragma mark - OEDBItem Overrides
+
++ (instancetype)createObjectInContext:(NSManagedObjectContext *)context
+{
+    OEDBSaveState *result = [super createObjectInContext:context];
+    result.timestamp = [NSDate date];
+    return result;
+}
+
++ (NSString *)entityName
 {
     return @"SaveState";
 }
 
-#pragma mark - Management
-- (BOOL)readInfoPlist
+#pragma mark - Private Helpers
+
++ (NSString *)OE_stringByRemovingTrailingSlash:(NSString *)string
 {
-    __block BOOL result = YES;
-    [[self managedObjectContext] performBlockAndWait:^{
-        NSDictionary *infoPlist = [self infoPlist];
-        NSString     *version   = [infoPlist valueForKey:OESaveStateInfoVersionKey];
-        if([version isEqualTo:@"1.0"])
-        {
-            NSString *infoName              = [infoPlist valueForKey:OESaveStateInfoNameKey];
-            NSString *infoCoreIdentifier    = [infoPlist valueForKey:OESaveStateInfoCoreIdentifierKey];
-            NSString *infoCoreVersion       = [infoPlist valueForKey:OESaveStateInfoCoreVersionKey];
-            NSString *infoUserDescription   = [infoPlist valueForKey:OESaveStateInfoDescriptionKey];
-            NSString *infoRomMD5            = [infoPlist valueForKey:OESaveStateInfoROMMD5Key];
-            NSDate   *infoTimestamp         = [infoPlist valueForKey:OESaveStateInfoTimestampKey];
+    if([string characterAtIndex:string.length-  1] == '/')
+        return [string substringToIndex:string.length - 1];
 
-            OEDBRom  *rom                   = [OEDBRom romWithMD5HashString:infoRomMD5 inContext:[self managedObjectContext] error:nil];
-            if(infoName==nil || infoCoreIdentifier==nil || infoRomMD5==nil || rom==nil)
-            {
-                result = NO;
-                return;
-            }
-
-            [self setName:infoName];
-            [self setCoreIdentifier:infoCoreIdentifier];
-            [self setCoreVersion:infoCoreVersion];
-            [self setRom:rom];
-
-            if(infoTimestamp)
-                [self setTimestamp:infoTimestamp];
-            else
-                [self setTimestamp:[NSDate date]];
-
-            if(infoUserDescription)
-                [self setUserDescription:infoUserDescription];
-        }
-        else
-        {
-            NSLog(@"Unkown Save State Version (%@)", version?:@"none");
-            result = NO;
-            return;
-        }
-
-        [[self managedObjectContext] save:nil];
-    }];
-    
-    return result;
+    return string;
 }
 
-- (BOOL)writeInfoPlist
++ (NSURL *)OE_dataURLWithBundleURL:(NSURL *)url
 {
-    __block NSString *name = nil;
-    __block NSString *coreIdentifier = nil;
-    __block NSString *coreVersion = nil;
-    __block NSString *md5Hash = nil;
-    __block NSDate   *timestamp = nil;
-    __block NSString *userDescription = nil;
-    __block NSURL    *infoPlistURL = nil;
-    __block NSMutableDictionary *infoPlist = nil;
+    return [url URLByAppendingPathComponent:OESaveStateDataFile];
+}
 
-    [[self managedObjectContext] performBlockAndWait:^{
-        name = [self name];
-        coreIdentifier = [self coreIdentifier];
-        coreVersion    = [self coreVersion];
-        md5Hash = [[self rom] md5Hash];
-        timestamp = [self timestamp];
-        userDescription = [self userDescription];
-        infoPlistURL = [self infoPlistURL];
++ (NSURL *)OE_infoPlistURLWithBundleURL:(NSURL *)url
+{
+    return [url URLByAppendingPathComponent:@"Info.plist"];
+}
 
-        infoPlist = [[self infoPlist] mutableCopy];
-    }];
++ (NSURL *)OE_screenShotURLWithBundleURL:(NSURL *)url
+{
+    return [url URLByAppendingPathComponent:OESaveStateScreenshotFile];
+}
 
-    // Save State Values
-    [infoPlist setObject:OESaveStateLatestVersion   forKey:OESaveStateInfoVersionKey];
-    [infoPlist setObject:name                       forKey:OESaveStateInfoNameKey];
-    [infoPlist setObject:coreIdentifier             forKey:OESaveStateInfoCoreIdentifierKey];
-    if(coreVersion)
-        [infoPlist setObject:coreVersion            forKey:OESaveStateInfoCoreVersionKey];
-    [infoPlist setObject:md5Hash                    forKey:OESaveStateInfoROMMD5Key];
-    [infoPlist setObject:timestamp                  forKey:OESaveStateInfoTimestampKey];
-    if(userDescription)
-        [infoPlist setObject:userDescription forKey:OESaveStateInfoDescriptionKey];
+#pragma mark - Handling Bundle & Files
+
+- (BOOL)writeToDisk
+{
+    NSURL *infoPlistURL = self.infoPlistURL;
+    NSMutableDictionary *infoPlist = [NSMutableDictionary dictionary];
+
+    NSString *name             = self.name;
+    NSString *coreIdentifier   = self.coreIdentifier;
+    NSString *md5Hash          = self.rom.md5HashIfAvailable;
+
+    NSString *coreVersion      = self.coreVersion;
+    NSDate   *timestamp        = self.timestamp;
+    NSString *userDescription  = self.userDescription;
+
+    if(name == nil || name.length == 0)
+    {
+        DLog(@"Save state is corrupted! Name is missing.");
+        return NO;
+    }
+    if(coreIdentifier == nil || coreIdentifier.length == 0)
+    {
+        DLog(@"Save state is corrupted! Core Identifier is invalid.");
+        return NO;
+    }
+    if(md5Hash == nil || md5Hash.length == 0)
+    {
+        DLog(@"Save state is corrupted! MD5Hash or rom are missing.");
+        return NO;
+    }
+
+    infoPlist[OESaveStateInfoNameKey] = name;
+    infoPlist[OESaveStateInfoCoreIdentifierKey] = coreIdentifier;
+    infoPlist[OESaveStateInfoROMMD5Key] = md5Hash;
+    infoPlist[OESaveStateInfoVersionKey] = OESaveStateLatestVersion;
+
+    if(userDescription != nil)
+        infoPlist[OESaveStateInfoDescriptionKey] = userDescription;
+    if(coreVersion != nil)
+        infoPlist[OESaveStateInfoCoreVersionKey] = coreVersion;
+    if(timestamp != nil)
+        infoPlist[OESaveStateInfoTimestampKey] = timestamp;
 
     if(![infoPlist writeToURL:infoPlistURL atomically:YES])
+    {
+        DLog(@"Unable to write Info.plist file!");
         return NO;
-    
+    }
+
     return YES;
 }
 
-- (void)remove
+- (BOOL)readFromDisk
 {
-    NSManagedObjectContext *context = [self managedObjectContext];
-    [context performBlock:^{
-        [[NSFileManager defaultManager] removeItemAtURL:[self URL] error:nil];
-        [context deleteObject:self];
-        [context save:nil];
-    }];
-}
+    NSError *error   = nil;
 
-- (void)removeIfMissing
-{
-    NSError *error;
-    if(![[self URL] checkResourceIsReachableAndReturnError:&error])
+    NSURL *infoPlistURL  = self.infoPlistURL;
+    NSURL *dataURL       = self.dataFileURL;
+
+    NSManagedObjectContext *context = self.managedObjectContext;
+
+    // Read values from Info.plist
+    NSDictionary *infoPlist = [NSDictionary dictionaryWithContentsOfURL:infoPlistURL];
+    if(infoPlist == nil)
     {
-        NSLog(@"Removing save state: %@", [self URL]);
-        NSLog(@"Reason: %@", [error localizedDescription]);
-        
-        [self remove];
+        DLog(@"Could not read Info.plist file! This state should be deleted!");
+        return NO;
     }
+    // First values are mandatory
+    NSString *name = infoPlist[OESaveStateInfoNameKey];
+    NSString *romMD5 = infoPlist[OESaveStateInfoROMMD5Key];
+    NSString *coreIdentifier = infoPlist[OESaveStateInfoCoreIdentifierKey];
+    // These values are kind of optional
+    NSString *coreVersion = infoPlist[OESaveStateInfoCoreVersionKey];
+    NSDate   *timestamp = infoPlist[OESaveStateInfoTimestampKey];
+    NSString *version = infoPlist[OESaveStateInfoVersionKey];
+    NSString *description = infoPlist[OESaveStateInfoDescriptionKey];
+
+    // make sure we have a version (shouldn't be a problem),
+    // and this OE version can handle it
+    if(version == nil || version.length == 0)
+    {
+        version = @"1.0";
+    }
+
+    if([version compare:OESaveStateLatestVersion] == NSOrderedDescending)
+    {
+        DLog(@"This version of OpenEmu only supports save states up to version %@. SaveState uses version %@ format", OESaveStateLatestVersion, version);
+        return NO;
+    }
+
+    // in the future, we can start differentiating save state versions here
+
+    // Check values for sanity
+    if(name == nil || name.length == 0)
+    {
+        DLog(@"Info.plist does not contain a valid name!");
+        return NO;
+    }
+
+    if(romMD5 == nil || romMD5.length == 0)
+    {
+        DLog(@"Info.plist does not contain a valid rom reference!");
+        return NO;
+    }
+
+    if(coreIdentifier == nil || coreIdentifier.length == 0)
+    {
+        DLog(@"Info.plist does not contain a valid core reference!");
+        return NO;
+    }
+
+    // Check additional files (data)
+    if(![dataURL checkResourceIsReachableAndReturnError:&error])
+    {
+        DLog(@"Data file is missing!");
+        DLog(@"%@", error);
+        return NO;
+    }
+
+    // Make sure the rom file is available
+    OEDBRom *rom = [OEDBRom romWithMD5HashString:romMD5 inContext:context error:&error];
+    if(rom == nil)
+    {
+        DLog(@"Could not find ROM with MD5 hash %@", romMD5);
+        DLog(@"%@", error);
+        return NO;
+    }
+
+    // Set mandatory values
+    self.name = name;
+    self.rom = rom;
+    self.coreIdentifier = coreIdentifier;
+
+    // Set optional values
+    if(coreVersion) self.coreVersion = coreVersion;
+    if(description) self.userDescription = description;
+    if(timestamp)   self.timestamp = timestamp;
+
+    return YES;
 }
 
-- (void)replaceStateFileWithFile:(NSURL *)stateFile
+- (BOOL)filesAvailable
 {
-    [[NSFileManager defaultManager] removeItemAtURL:[self stateFileURL] error:nil];
-    [[NSFileManager defaultManager] copyItemAtURL:stateFile toURL:[self stateFileURL] error:nil];
+    NSURL *bundleURL  = self.URL;
+    NSURL *stateURL   = self.dataFileURL;
+    NSURL *infoURL    = self.infoPlistURL;
+
+    return [bundleURL checkResourceIsReachableAndReturnError:nil]
+    && [stateURL checkResourceIsReachableAndReturnError:nil]
+    && [infoURL checkResourceIsReachableAndReturnError:nil];
 }
 
-- (void)moveToDefaultLocation
+- (BOOL)replaceStateFileWithFile:(NSURL *)stateFile
 {
-    [[self managedObjectContext] performBlock:^{
-        NSURL    *saveStateFolderURL = [[self libraryDatabase] stateFolderURLForROM:[self rom]];
-        if([[self URL] isSubpathOfURL:saveStateFolderURL]) return;
+    NSError *error = nil;
+    if(![[NSFileManager defaultManager] removeItemAtURL:self.dataFileURL error:&error])
+    {
+        DLog(@"Could not delete previous state file!");
+        DLog(@"%@", error);
+    }
 
-        NSURL    *newStateURL        = [saveStateFolderURL URLByAppendingPathComponent:[[self URL] lastPathComponent]];
-        NSString *currentFileName    = [[[self URL] lastPathComponent] stringByDeletingPathExtension];
-        newStateURL                  = [newStateURL uniqueURLUsingBlock:^NSURL *(NSInteger triesCount) {
-            return [saveStateFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"%@ %ld.%@", currentFileName, triesCount, OESaveStateSuffix]];
-        }];
+    if(![[NSFileManager defaultManager] moveItemAtURL:stateFile toURL:self.dataFileURL error:&error])
+    {
+        DLog(@"Could not copy new state file");
+        DLog(@"%@", error);
+        return NO;
+    }
+    return YES;
+}
 
-        NSError *error = nil;
-        if(![[NSFileManager defaultManager] moveItemAtURL:[self URL] toURL:newStateURL error:&error])
-        {
-            DLog(@"Error occured while moving State to default location");
-            DLog(@"%@", [error localizedDescription]);
-            return;
-        }
-        [self setURL:newStateURL];
-        [[self managedObjectContext] save:nil];
-    }];
+- (BOOL)isValid
+{
+    if(!(self.filesAvailable && self.rom != nil))
+    {
+        NSURL *bundleURL  = self.URL;
+        NSURL *stateURL   = self.dataFileURL;
+        NSURL *infoURL    = self.infoPlistURL;
+
+        if(![bundleURL checkResourceIsReachableAndReturnError:nil])
+            DLog(@"bundle missing: %@", bundleURL);
+        if(![stateURL checkResourceIsReachableAndReturnError:nil])
+            DLog(@"state missing: %@", stateURL);
+        if(![infoURL checkResourceIsReachableAndReturnError:nil])
+            DLog(@"info.plist missing: %@", infoURL);
+    }
+    return self.filesAvailable && self.rom != nil;
+}
+
+#pragma mark - Management
+
+- (void)deleteAndRemoveFiles
+{
+    NSURL *url = self.URL;
+    if(url)
+        [[NSFileManager defaultManager] trashItemAtURL:url resultingItemURL:nil error:nil];
+    [self delete];
+    [self save];
+}
+
+- (void)deleteAndRemoveFilesIfInvalid
+{
+    if(!self.isValid)
+        [self deleteAndRemoveFiles];
+}
+
+- (BOOL)moveToDefaultLocation
+{
+    OEDBRom *rom = self.rom;
+    NSURL *saveStateDirectoryURL = [self.libraryDatabase stateFolderURLForROM:rom];
+    NSURL *currentURL = self.URL;
+
+    NSString *desiredName = [NSURL validFilenameFromString:self.displayName];
+    NSString *desiredFileName = [NSString stringWithFormat:@"%@.%@", desiredName, OESaveStateSuffix];
+    NSURL    *url         = [saveStateDirectoryURL URLByAppendingPathComponent:desiredFileName isDirectory:NO];
+
+    // check if save state is already where it's supposed to be
+    if([url.absoluteURL.standardizedURL isEqualTo:currentURL.absoluteURL.standardizedURL]) return YES;
+
+    // check if url is already take, determine unique url if so
+    if([url checkResourceIsReachableAndReturnError:nil])
+    {
+        NSUInteger count = 1;
+        do {
+            desiredFileName = [NSString stringWithFormat:@"%@ %ld.%@", desiredName, count, OESaveStateSuffix];
+            url = [saveStateDirectoryURL URLByAppendingPathComponent:desiredFileName isDirectory:NO];
+            count ++;
+        } while([url.standardizedURL isNotEqualTo:currentURL.standardizedURL] && [url checkResourceIsReachableAndReturnError:nil]);
+    }
+
+    // only proceed if the location has changed
+    if([url.absoluteURL.standardizedURL isEqualTo:currentURL.absoluteURL.standardizedURL]) return YES;
+
+    NSError *error = nil;
+    if(![[NSFileManager defaultManager] moveItemAtURL:currentURL toURL:url error:&error])
+    {
+        DLog(@"Could not move save state to new location!");
+        return NO;
+    }
+
+    self.URL = url;
+    [self save];
+
+    return YES;
+}
+
+
+- (void)willSave
+{
+    if(self.hasChanges && !self.isDeleted)
+        [self writeToDisk];
+}
+
+#pragma mark - NSPasteboardWriting
+- (NSArray *)writableTypesForPasteboard:(NSPasteboard *)pasteboard
+{
+    return @[ (NSString *)kUTTypeFileURL ];
+}
+
+- (nullable id)pasteboardPropertyListForType:(NSString *)type
+{
+    if([type isEqualToString:(NSString *)kUTTypeFileURL])
+    {
+        return [self.URL.absoluteURL pasteboardPropertyListForType:type];
+    }
+
+    return nil;
 }
 
 #pragma mark - Data Accessors
 
 - (NSString *)displayName
 {
-    if(![self isSpecialState])
-        return [self name];
+    if(!self.isSpecialState)
+        return self.name;
     
-    NSString *name = [self name];
+    NSString *name = self.name;
     if([name isEqualToString:OESaveStateAutosaveName])
     {
         return NSLocalizedString(@"Auto Save State", @"Autosave state display name");
@@ -412,63 +588,59 @@ NSString *const OESaveStateUseQuickSaveSlotsKey = @"UseQuickSaveSlots";
     {
         return NSLocalizedString(@"Quick Save State", @"Quicksave state display name");
     }
+    else if([name rangeOfString:OESaveStateQuicksaveName].location == 0)
+    {
+        return [NSString stringWithFormat:NSLocalizedString(@"Quick Save, Slot %@", @"Quicksave state display name with slot"), [name substringFromIndex:OESaveStateQuicksaveName.length]];
+    }
     return name;
 }
 
 - (BOOL)isSpecialState
 {
-    return [[self name] rangeOfString:OESaveStateSpecialNamePrefix].location == 0;
+    return [self.name rangeOfString:OESaveStateSpecialNamePrefix].location == 0;
 }
 
-#pragma mark -
-#pragma mark Data Model Properties
+#pragma mark - Data Model Properties
 
-@dynamic name, userDescription, timestamp;
-@dynamic coreIdentifier, location, coreVersion;
+@dynamic location;
 
 - (NSURL *)URL
 {
-    return [NSURL URLWithString:[self location]];
+    NSURL *saveStateDirectoryURL = self.libraryDatabase.stateFolderURL;
+    return [NSURL URLWithString:self.location relativeToURL:saveStateDirectoryURL];
 }
 
 - (void)setURL:(NSURL *)url
 {
-    [self setLocation:[url absoluteString]];
+    NSURL *saveStateDirectoryURL = self.libraryDatabase.stateFolderURL;
+    NSString *string = [url URLRelativeToURL:saveStateDirectoryURL].relativeString;
+
+    // make sure we don't save trailing '/' for save state bundles
+    string = [[self class] OE_stringByRemovingTrailingSlash:string];
+
+    [self setLocation:string];
 }
 
 - (NSURL *)screenshotURL
 {
-    return [[self URL] URLByAppendingPathComponent:OESaveStateScreenshotFile];
+    return [[self class] OE_screenShotURLWithBundleURL:self.URL];
 }
 
-- (NSURL *)stateFileURL
+- (NSURL *)dataFileURL
 {
-    return [[self URL] URLByAppendingPathComponent:OESaveStateDataFile];
-}
-
-- (NSString *)systemIdentifier
-{
-    return [[[[self rom] game] system] systemIdentifier];
-}
-
-- (NSDictionary *)infoPlist
-{
-    NSDictionary *infoPlist = [NSDictionary dictionaryWithContentsOfURL:[self infoPlistURL]];
-    
-    if(!infoPlist)
-        infoPlist = [NSDictionary dictionary];
-    
-    return infoPlist;
+    return [[self class] OE_dataURLWithBundleURL:self.URL];
 }
 
 - (NSURL *)infoPlistURL
 {
-    return [[self URL] URLByAppendingPathComponent:@"Info.plist"];
+    return [[self class] OE_infoPlistURLWithBundleURL:self.URL];
 }
 
-#pragma mark -
-#pragma mark Data Model Relationships
-
-@dynamic rom;
+- (nullable NSString *)systemIdentifier
+{
+    return self.rom.game.system.systemIdentifier;
+}
 
 @end
+
+NS_ASSUME_NONNULL_END

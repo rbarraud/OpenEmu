@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2012, OpenEmu Team
+ Copyright (c) 2015, OpenEmu Team
  
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -24,32 +24,45 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
+NS_ASSUME_NONNULL_BEGIN
 
-typedef enum  {
+@import Foundation;
+
+@class OEROMImporter;
+
+typedef NS_ENUM(NSInteger, OEImportExitStatus)  {
     OEImportExitNone,
     OEImportExitErrorResolvable,
     OEImportExitErrorFatal,
     OEImportExitSuccess,
-} OEImportExitStatus;
+};
+
+extern NSString * const OEImportManualSystems;
 
 typedef void (^OEImportItemCompletionBlock)(NSManagedObjectID*);
-@class OEROMImporter;
-@interface OEImportOperation : NSOperation <NSObject, NSCoding>
-+ (instancetype)operationWithURL:(NSURL*)url inImporter:(OEROMImporter*)importer;
+
+@interface OEImportOperation: NSOperation <NSObject, NSCoding, NSCopying>
+
++ (nullable instancetype)operationWithURL:(NSURL*)operationURL inImporter:(OEROMImporter *)importer;
+
 @property BOOL exploreArchives;
 
-@property (copy) NSURL    *URL;
-@property (copy) NSURL               *sourceURL;
-@property (copy) NSManagedObjectID   *collectionID;
+@property (copy) NSURL *URL;
+@property (copy) NSURL *sourceURL;
+@property (nullable, copy) NSManagedObjectID *collectionID;
 @property (nonatomic, readonly) NSManagedObjectID *romObjectID;
+@property (nullable) NSURL *extractedFileURL;
 
+@property NSArray <NSString *> *systemIdentifiers;
 
-@property (strong, readonly) NSArray *systemIdentifiers;
+@property (copy, nullable) NSError *error;
+@property OEImportExitStatus exitStatus;
 
-@property (copy) NSError             *error;
-@property        OEImportExitStatus   exitStatus;
+@property (copy, nullable) OEImportItemCompletionBlock completionHandler;
+@property OEROMImporter *importer;
 
-@property (copy) OEImportItemCompletionBlock completionHandler;
-@property (strong) OEROMImporter *importer;
+@property (getter=isChecked) BOOL checked;
+
 @end
+
+NS_ASSUME_NONNULL_END

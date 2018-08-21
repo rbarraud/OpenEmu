@@ -30,16 +30,28 @@
 
 typedef enum _OE5200Button
 {
-	OE5200ButtonUp,
-	OE5200ButtonDown,
-	OE5200ButtonLeft,
-	OE5200ButtonRight,
-	OE5200ButtonFire1,
+    OE5200ButtonUp,
+    OE5200ButtonDown,
+    OE5200ButtonLeft,
+    OE5200ButtonRight,
+    OE5200ButtonFire1,
     OE5200ButtonFire2,
     OE5200ButtonStart,
-	OE5200ButtonPause,
+    OE5200ButtonPause,
     OE5200ButtonReset,
-	OE5200ButtonCount
+    OE5200Button1,
+    OE5200Button2,
+    OE5200Button3,
+    OE5200Button4,
+    OE5200Button5,
+    OE5200Button6,
+    OE5200Button7,
+    OE5200Button8,
+    OE5200Button9,
+    OE5200Button0,
+    OE5200ButtonAsterisk,
+    OE5200ButtonPound,
+    OE5200ButtonCount
 } OE5200Button;
 
 @protocol OE5200SystemResponderClient <OESystemResponderClient, NSObject>

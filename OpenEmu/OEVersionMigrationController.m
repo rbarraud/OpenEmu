@@ -30,7 +30,12 @@
 
 #import "OEDBImageMigrationPolicy.h"
 #import "OELibraryDatabase.h"
+#import "OEDBGame.h"
 #import "OEDBImage.h"
+#import "OEDBRom.h"
+#import "OEDBScreenshot+CoreDataProperties.h"
+
+#import "OpenEmu-Swift.h"
 
 @interface _OEMigrator : NSObject
 {
@@ -113,6 +118,11 @@ static OEVersionMigrationController *sDefaultMigrationController = nil;
         [self OE_runImageMigration];
     }
 
+    if([userDefaults boolForKey:OEDBScreenshotImportRequired])
+    {
+        [self OE_importScreenshots];
+    }
+
     // We have to work around the fact that older versions of OpenEmu didn't stick a version key in the plist.
     // If the Sparkle key for an existing launch doesn't exist, then this is a new installation, not an upgrade.
     // Thus, we log our current version and prevent the migration. Subsequent migrations will then have the new version.
@@ -131,17 +141,18 @@ static OEVersionMigrationController *sDefaultMigrationController = nil;
 - (void)OE_runImageMigration
 {
     dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0);
-    void (^block)() = ^{
+    void (^block)(void) = ^{
         NSUserDefaults *userDefaults = [NSUserDefaults standardUserDefaults];
         OEBitmapImageFileType format = [userDefaults integerForKey:OEGameArtworkFormatKey];
         NSDictionary     *attributes = [userDefaults dictionaryForKey:OEGameArtworkPropertiesKey];
 
         OELibraryDatabase *database = [OELibraryDatabase defaultDatabase];
         NSFetchRequest    *request  = [NSFetchRequest fetchRequestWithEntityName:[OEDBImage entityName]];
+        [request setFetchLimit:1];
         NSPredicate     *predicate  = [NSPredicate predicateWithFormat:@"format = -1"];
         [request setPredicate:predicate];
 
-        NSManagedObjectContext *context = [database makeChildContext];
+        NSManagedObjectContext *context = [database mainThreadContext];
         NSArray *images = [context executeFetchRequest:request error:nil];
         if(images != nil && [images count] == 0)
         {
@@ -160,17 +171,96 @@ static OEVersionMigrationController *sDefaultMigrationController = nil;
         }
         else
         {
-            [images enumerateObjectsUsingBlock:^(OEDBImage *image, NSUInteger idx, BOOL *stop) {
-                if(![image convertToFormat:format withProperties:attributes])
-                {
-                    DLog(@"Failed to migrate image! Delete...");
-                    [[image managedObjectContext] deleteObject:image];
-                    [[image managedObjectContext] save:nil];
-                }
+            [request setFetchLimit:10];
+            __block NSUInteger count = 0;
+            [context performBlockAndWait:^{
+                count = [context countForFetchRequest:request error:nil];
             }];
+            while(count != 0)
+            {
+                [context performBlockAndWait:^{
+                    NSArray *images = [context executeFetchRequest:request error:nil];
+                    [images enumerateObjectsUsingBlock:^(OEDBImage *image, NSUInteger idx, BOOL *stop) {
+                        if(![image convertToFormat:format withProperties:attributes])
+                        {
+                            DLog(@"Failed to migrate image! Delete...");
+                            [[image managedObjectContext] deleteObject:image];
+                        }
+                    }];
+                    [context save:nil];
+                }];
+
+                [NSThread sleepForTimeInterval:1.0];
+
+                [context performBlockAndWait:^{
+                    count = [context countForFetchRequest:request error:nil];
+                }];
+            }
         }
     };
     dispatch_async(queue, block);
+}
+
+- (void)OE_importScreenshots
+{
+    OELibraryDatabase *database = [OELibraryDatabase defaultDatabase];
+
+    NSURL *screenshotFolderURL = [database screenshotFolderURL];
+    [self OE_importScreenShotsFromDirectory:screenshotFolderURL];
+
+    [[database mainThreadContext] save:nil];
+
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:OEDBScreenshotImportRequired];
+}
+
+- (void)OE_importScreenShotsFromDirectory:(NSURL*)directory
+{
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray    *files = [fm contentsOfDirectoryAtURL:directory includingPropertiesForKeys:@[NSURLIsDirectoryKey] options:0 error:nil];
+
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    [formatter setDateFormat:@"yyyy-MM-dd HH.mm.ss"];
+
+    for(NSURL *url in files)
+    {
+        if([url isDirectory])
+        {
+            [self OE_importScreenShotsFromDirectory:url];
+        }
+        else
+        {
+            NSManagedObjectContext *context = [[OELibraryDatabase defaultDatabase] mainThreadContext];
+
+            NSString *file = [[url lastPathComponent] stringByDeletingPathExtension];
+            NSString *extension = [url pathExtension];
+
+            const NSUInteger dateLength = 19;
+            if([file length] <= dateLength+1 || ![[extension lowercaseString] isEqualToString:@"png"])
+                continue;
+
+            NSString *dateString = [file substringFromIndex:[file length]-dateLength];
+            NSDate    *timestamp = [formatter dateFromString:dateString];
+            NSString   *gameName = [file substringToIndex:[file length]-dateLength-1];
+
+
+            NSFetchRequest *request = [NSFetchRequest fetchRequestWithEntityName:[OEDBRom entityName]];
+
+            NSArray *predicates = @[ [NSPredicate predicateWithFormat:@"game.name contains[cd] %@", gameName],
+                                     [NSPredicate predicateWithFormat:@"game.gameTitle contains[cd] %@", gameName]];
+            [request setPredicate:[NSCompoundPredicate orPredicateWithSubpredicates:predicates]];
+
+            NSArray *fetchResult = [context executeFetchRequest:request error:nil];
+            if([fetchResult count] == 0) continue;
+
+            OEDBRom *rom = [fetchResult lastObject];
+
+            OEDBScreenshot *screenShot = [OEDBScreenshot createObjectInContext:context];
+            [screenShot setName:@"Screenshot"];
+            [screenShot setTimestamp:timestamp];
+            [screenShot setLocation:[url absoluteString]];
+            [screenShot setRom:rom];
+        }
+    }
 }
 
 #pragma mark -
@@ -219,7 +309,7 @@ static OEVersionMigrationController *sDefaultMigrationController = nil;
             *err = [NSError errorWithDomain:OEVersionMigrationErrorDomain
                                        code:1 
                                    userInfo:[NSDictionary dictionaryWithObjectsAndKeys:
-                                             NSLocalizedString(@"Some migrations failed to complete properly",@""),NSLocalizedDescriptionKey,
+                                             NSLocalizedString(@"Some migrations failed to complete properly", @""),NSLocalizedDescriptionKey,
                                              errors,OEVersionMigrationFailureErrorsKey,
                                              nil]];
         

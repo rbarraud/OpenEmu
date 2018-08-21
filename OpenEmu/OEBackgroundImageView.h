@@ -24,13 +24,11 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
 #import "OEControl.h"
 
 @interface OEBackgroundImageView : NSView <OEControl>
 - (id)initWithThemeKey:(NSString*)themeKey;
-
-@property (getter=isFlipped, setter=setFlipped:) BOOL flipped;
 
 @property(nonatomic, retain) NSImage               *image;
 @property(nonatomic, retain) OEThemeImage          *backgroundThemeImage;
@@ -39,4 +37,5 @@
 
 @property(nonatomic, readonly, getter = isTrackingWindowActivity)    BOOL trackWindowActivity;
 @property(nonatomic, readonly, getter = isTrackingMouseActivity)     BOOL trackMouseActivity;
+@property BOOL shouldFlipCoordinates;
 @end

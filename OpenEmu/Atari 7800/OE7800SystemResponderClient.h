@@ -30,23 +30,26 @@
 
 typedef enum _OE7800Button
 {
-	OE7800ButtonUp,
-	OE7800ButtonDown,
-	OE7800ButtonLeft,
-	OE7800ButtonRight,
-	OE7800ButtonFire1,
+    OE7800ButtonUp,
+    OE7800ButtonDown,
+    OE7800ButtonLeft,
+    OE7800ButtonRight,
+    OE7800ButtonFire1,
     OE7800ButtonFire2,
     OE7800ButtonSelect,
-	OE7800ButtonPause,
+    OE7800ButtonPause,
     OE7800ButtonReset,
     OE7800ButtonLeftDiff,
     OE7800ButtonRightDiff,
-	OE7800ButtonCount
+    OE7800ButtonCount
 } OE7800Button;
 
 @protocol OE7800SystemResponderClient <OESystemResponderClient, NSObject>
 
 - (oneway void)didPush7800Button:(OE7800Button)button forPlayer:(NSUInteger)player;
 - (oneway void)didRelease7800Button:(OE7800Button)button forPlayer:(NSUInteger)player;
+- (oneway void)mouseMovedAtPoint:(OEIntPoint)point;
+- (oneway void)leftMouseDownAtPoint:(OEIntPoint)point;
+- (oneway void)leftMouseUp;
 
 @end

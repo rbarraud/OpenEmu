@@ -31,6 +31,9 @@
 #import "OEMenuDocumentView.h"
 #import "NSMenuItem+OEMenuItemExtraDataAdditions.h"
 #import "OEPopUpButton.h"
+#import "OEMenuItemExtraData.h"
+
+#import <objc/runtime.h>
 
 #pragma mark -
 #pragma mark Menu option keys
@@ -62,6 +65,7 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
     NSAssert(result != nil, @"out of memory");
     [result setMenu:menu];
     [result OE_parseOptions:options];
+    [menu setOEMenu:result];
 
     return result;
 }
@@ -91,8 +95,8 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
     NSRect   rect       = NSZeroRect;
     NSValue *rectValue  = [options objectForKey:OEMenuOptionsScreenRectKey];
     if(rectValue)  rect = [rectValue rectValue];
-    else if(event) rect = (NSRect){ .origin = [[event window] convertBaseToScreen:[event locationInWindow]] };
-    else           rect = [[view window] convertRectToScreen:[view convertRect:[view bounds] toView:nil]];
+    else if(event) rect = [[event window] convertRectToScreen:(NSRect){ .origin = [event locationInWindow] }];
+    else           rect = [[view window]  convertRectToScreen:[view convertRect:[view bounds] toView:nil]];
 
     [result OE_updateFrameAttachedToScreenRect:rect];
     NSEvent *postEvent = [result OE_showMenuAttachedToWindow:[event window] withEvent:event];
@@ -101,7 +105,13 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
         [NSApp postEvent:postEvent atStart:NO];
 }
 
-- (id)initWithContentRect:(NSRect)contentRect styleMask:(NSUInteger)aStyle backing:(NSBackingStoreType)bufferingType defer:(BOOL)flag screen:(NSScreen *)screen
++ (NSSize)sizeOfMenu:(NSMenu *)menu forView:(NSView *)view options:(NSDictionary *)options
+{
+    OEMenu *oemenu = [self OE_menuWithMenu:menu forScreen:[[view window] screen] options:options];
+    return oemenu.intrinsicSize;
+}
+
+- (id)initWithContentRect:(NSRect)contentRect styleMask:(NSWindowStyleMask)aStyle backing:(NSBackingStoreType)bufferingType defer:(BOOL)flag screen:(NSScreen *)screen
 {
     if((self = [super initWithContentRect:contentRect styleMask:aStyle backing:bufferingType defer:flag screen:screen]))
     {
@@ -118,6 +128,11 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
         [self setCollectionBehavior:NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle];
     }
     return self;
+}
+
+- (void)dealloc
+{
+    [[self menu] setOEMenu:nil];
 }
 
 - (void)orderWindow:(NSWindowOrderingMode)place relativeTo:(NSInteger)otherWin
@@ -163,14 +178,13 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
          }];
     };
 
+    id<NSMenuDelegate> delegate = [[self menu] delegate];
     void (^fireCompletionHandler)(void) = ^{
         if(completionHandler) completionHandler();
         [[self parentWindow] removeChildWindow:self];
 
         // Invoked after a menu closed.
-        id<NSMenuDelegate> delegate = [[self menu] delegate];
-        if([delegate respondsToSelector:@selector(menuDidClose:)]) [delegate menuDidClose:[_view menu]];
-
+        if([delegate respondsToSelector:@selector(menuDidClose:)]) [delegate menuDidClose:[self->_view menu]];
     };
 
     [NSAnimationContext runAnimationGroup:changes completionHandler:fireCompletionHandler];
@@ -178,11 +192,12 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
 
 - (void)OE_cancelTrackingWithFadeDuration:(CGFloat)duration completionHandler:(void (^)(void))completionHandler
 {
-    if(_cancelTracking) return;
+    if(_cancelTracking || [__sharedMenuStack count]==0) return;
     _cancelTracking = YES;
 
     if(self != [__sharedMenuStack objectAtIndex:0]) [[__sharedMenuStack objectAtIndex:0] OE_cancelTrackingWithFadeDuration:duration completionHandler:completionHandler];
-    else                                            [self OE_hideWindowWithFadeDuration:duration completionHandler:completionHandler];
+    else
+        [self OE_hideWindowWithFadeDuration:duration completionHandler:completionHandler];
 }
 
 - (void)cancelTracking
@@ -305,14 +320,13 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
         case OEMaxXEdge:
             if(NSMinX(frame) < NSMinX(screenFrame) || NSMaxX(frame) > NSMaxX(screenFrame))
             {
-                NSLog(@"Flip to the other side.");
                 OERectEdge newEdge = ((edge == OEMinXEdge) ? OEMaxXEdge : OEMinXEdge);
                 frame.origin       = originForEdge(newEdge);
 
                 if((NSMinX(frame) < NSMinX(screenFrame)) || (NSMaxX(frame) > NSMaxX(screenFrame)))
                 {
                     // TODO: Make view smaller
-                    NSLog(@"Make view smaller");
+                    NSLog(@"TODO: Make view smaller");
                 }
                 else
                 {
@@ -332,14 +346,13 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
         case OEMaxYEdge:
             if(NSMinY(frame) < NSMinY(screenFrame) || NSMaxY(frame) > NSMaxY(screenFrame))
             {
-                NSLog(@"Flip to the other side.");
                 OERectEdge newEdge = ((edge == OEMinYEdge) ? OEMaxYEdge : OEMinYEdge);
                 frame.origin       = originForEdge(newEdge);
 
                 if((NSMinY(frame) < NSMinY(screenFrame)) || (NSMaxY(frame) > NSMaxY(screenFrame)))
                 {
                     // TODO: Make view smaller
-                    NSLog(@"Make view smaller");
+                    NSLog(@"TODO: Make view smaller");
                 }
                 else
                 {
@@ -480,13 +493,16 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
     [parentWindow addChildWindow:self ordered:NSWindowAbove];
     if(![parentWindow isKindOfClass:[OEMenu class]] && ![parentWindow isKeyWindow]) [parentWindow makeKeyAndOrderFront:self];
     if(![parentWindow isKindOfClass:[OEMenu class]] || [parentWindow isVisible]) [self orderFrontRegardless];
+
+    if(![parentWindow isKindOfClass:[OEMenu class]])
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(parentWindowWillClose:) name:NSWindowWillCloseNotification object:parentWindow];
 }
 
 + (NSPoint)OE_locationInScreenForEvent:(NSEvent *)event
 {
     const NSPoint locationInWindow = [event locationInWindow];
     NSWindow *window               = [event window];
-    return window == nil ? locationInWindow : [window convertBaseToScreen:locationInWindow];
+    return window == nil ? locationInWindow : [window convertRectToScreen:(NSRect){.origin=locationInWindow}].origin;
 }
 
 - (NSEvent *)OE_mockMouseEvent:(NSEvent *)event
@@ -652,6 +668,11 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
     [_view setMenu:menu];
 }
 
+- (void)parentWindowWillClose:(NSNotification*)notification
+{
+    [self cancelTrackingWithoutAnimation];
+}
+
 @end
 
 @implementation OEMenu (OEMenuViewAdditions)
@@ -726,4 +747,18 @@ static NSMutableArray *__sharedMenuStack; // Array of all the open instances of 
     [self OE_cancelTrackingWithFadeDuration:OEMenuFadeOutDuration completionHandler:completionHandler];
 }
 
+@end
+
+
+const static char OEMenuReference;
+@implementation NSMenu (OEMenuAdditions)
+- (void)setOEMenu:(OEMenu *)oeMenu
+{
+    objc_setAssociatedObject(self, &OEMenuReference, oeMenu, OBJC_ASSOCIATION_ASSIGN);
+}
+
+- (OEMenu*)oeMenu
+{
+    return objc_getAssociatedObject(self, &OEMenuReference);
+}
 @end

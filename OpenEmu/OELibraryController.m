@@ -31,6 +31,9 @@
 #import "OESidebarController.h"
 #import "OELibrarySplitView.h"
 
+#import "OEButton.h"
+#import "OESearchField.h"
+
 #import "OELibrarySubviewController.h"
 #import "OEROMImporter.h"
 
@@ -38,177 +41,174 @@
 #import "OESystemPlugin.h"
 #import "OEDBSmartCollection.h"
 
-#import "NSViewController+OEAdditions.h"
-#import "NSArray+OEAdditions.h"
-#import "NSWindow+OEFullScreenAdditions.h"
-
-#import "OEPreferencesController.h"
-
 #import "OEBackgroundNoisePattern.h"
 
+#import "OEGameCollectionViewController.h"
+#import "OEMediaViewController.h"
+#import "OEDBSavedGamesMedia.h"
+#import "OEDBScreenshotsMedia.h"
+#import "OEHomebrewViewController.h"
+
+#import "OELibraryGamesViewController.h"
+
+#import "OpenEmu-Swift.h"
+
 #pragma mark - Exported variables
-NSString * const OELastCollectionSelectedKey = @"lastCollectionSelected";
+NSString * const OELastSidebarSelectionKey = @"lastSidebarSelection";
+NSString * const OELibraryStatesKey        = @"Library States";
+NSString * const OELibraryLastCategoryKey = @"OELibraryLastCategoryKey";
+
+typedef NS_ENUM(NSUInteger, OELibraryCategory) {
+    OELibraryCategoryGames,
+    OELibraryCategorySaveStates,
+    OELibraryCategoryScreenshots,
+    OELibraryCategoryHomebrew,
+
+    OELibraryCategoryCount
+};
 
 #pragma mark - Imported variables
 extern NSString * const OESidebarSelectionDidChangeNotificationName;
 
-#pragma mark - Private variables
-static const CGFloat _OEToolbarHeight = 44;
-
 @interface OELibraryController ()
+
 - (void)OE_showFullscreen:(BOOL)fsFlag animated:(BOOL)animatedFlag;
 
-@property NSMutableDictionary *subviewControllers;
-- (NSViewController<OELibrarySubviewController> *)viewControllerWithClassName:(NSString *)className;
+@property OELibraryCategory selectedCategory;
+@property (nonatomic, readwrite) NSViewController <OELibrarySubviewController> *currentSubviewController;
+
+// Library subview controllers.
+@property (strong, readonly) OELibraryGamesViewController *libraryGamesViewController;
+@property (strong, readonly) OEMediaViewController *saveStatesViewController;
+@property (strong, readonly) OEMediaViewController *screenshotsViewController;
+@property (strong, readonly) OEHomebrewViewController *homebrewViewController;
+
 @end
 
 @implementation OELibraryController
-@synthesize cachedSnapshot = _cachedSnapshot;
 
-- (void)dealloc
-{
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
-
-#pragma mark - NSViewController stuff
 - (NSString *)nibName
 {
-    return @"Library";
+    return @"OELibraryController";
 }
 
-- (void)loadView
+- (void)viewDidLoad
 {
-    [super loadView];
-
-    [self setSubviewControllers:[NSMutableDictionary dictionary]];
-
+    [super viewDidLoad];
+    
     if([self database] == nil) [self setDatabase:[OELibraryDatabase defaultDatabase]];
     
-    [[self sidebarController] view];
+    [self setUpCategoryViewControllers];
     
-    // setup sidebar controller
-    OESidebarController *sidebarCtrl = [self sidebarController];    
-    [sidebarCtrl setDatabase:[self database]];
-
-    [[self view] setPostsFrameChangedNotifications:YES];
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(sidebarSelectionDidChange:) name:OESidebarSelectionDidChangeNotificationName object:nil];
-    [[NSNotificationCenter defaultCenter] postNotificationName:OESidebarSelectionDidChangeNotificationName object:sidebarCtrl];
+    _selectedCategory = [[NSUserDefaults standardUserDefaults] integerForKey:OELibraryLastCategoryKey];
+    if(_selectedCategory >= OELibraryCategoryCount) {
+        _selectedCategory = OELibraryCategoryGames;
+    }
     
-    [self updateToggleSidebarButtonState];
+    [self _showSubviewControllerForCategory:_selectedCategory];
+}
 
-    // setup splitview
-    OELibrarySplitView *splitView = [self mainSplitView];
-    [splitView setDelegate:self];
-
-    // setup hotkeys
-    [_toolbarSidebarButton setToolTip:NSLocalizedString(@"Toggle Sidebar", @"Tooltip")];
-    [_toolbarSidebarButton setToolTipStyle:OEToolTipStyleDefault];
-
-    [_toolbarGridViewButton setToolTip:NSLocalizedString(@"Switch To Grid View", @"Tooltip")];
-    [_toolbarGridViewButton setToolTipStyle:OEToolTipStyleDefault];
-
-    [_toolbarFlowViewButton setToolTip:NSLocalizedString(@"Switch To Flow View", @"Tooltip")];
-    [_toolbarFlowViewButton setToolTipStyle:OEToolTipStyleDefault];
-
-    [_toolbarListViewButton setToolTip:NSLocalizedString(@"Switch To List View", @"Tooltip")];
-    [_toolbarListViewButton setToolTipStyle:OEToolTipStyleDefault];
-
-    [_toolbarAddToSidebarButton setToolTip:NSLocalizedString(@"New Collection", @"Tooltip")];
-    [_toolbarAddToSidebarButton setToolTipStyle:OEToolTipStyleDefault];
+- (void)setUpCategoryViewControllers
+{
+    _libraryGamesViewController = [[OELibraryGamesViewController alloc] init];
+    _libraryGamesViewController.libraryController = self;
+    
+    _saveStatesViewController = [[OEMediaViewController alloc] init];
+    _saveStatesViewController.libraryController = self;
+    _saveStatesViewController.representedObject = [OEDBSavedGamesMedia sharedDBSavedGamesMedia];
+    
+    _screenshotsViewController = [[OEMediaViewController alloc] init];
+    _screenshotsViewController.libraryController = self;
+    _screenshotsViewController.representedObject = [OEDBScreenshotsMedia sharedDBScreenshotsMedia];
+    
+    _homebrewViewController = [[OEHomebrewViewController alloc] init];
+    _homebrewViewController.libraryController = self;
+    
+    [self addChildViewController:_libraryGamesViewController];
+    [self addChildViewController:_saveStatesViewController];
+    [self addChildViewController:_screenshotsViewController];
+    [self addChildViewController:_homebrewViewController];
 }
 
 - (void)viewDidAppear
 {
     [super viewDidAppear];
-    
-    [self layoutToolbar];
-    
-    [[self sidebarController] reloadData];
+
+    [[[self toolbar] categorySelector] setSelectedSegment:_selectedCategory];
 }
 
 - (void)viewWillDisappear
 {
     [super viewWillDisappear];
     
-    // Save Current State
-    id lastState = [(id <OELibrarySubviewController>)[self currentViewController] encodeCurrentState];
-    id itemID    = [[[self currentViewController] representedObject] sidebarID];
-    [self OE_storeState:lastState forSidebarItemWithID:itemID];
-    
-    NSView *toolbarItemContainer = [[self toolbarSearchField] superview];
-    
+    NSView *toolbarItemContainer = [[[self toolbar] searchField] superview];
     [toolbarItemContainer setAutoresizingMask:NSViewWidthSizable];
 }
 
 #pragma mark - Toolbar
 
-- (IBAction)toggleSidebar:(id)sender
+- (IBAction)addCollectionAction:(id)sender
 {
-    [[self mainSplitView] toggleSidebar];
-}
-
-- (void)updateToggleSidebarButtonState
-{
-    [[self toolbarSidebarButton] setState:([[self mainSplitView] isSidebarVisible] ? NSOnState : NSOffState)];
-    [[self toolbarSidebarButton] display];
+    if([[self currentSubviewController] respondsToSelector:@selector(addCollectionAction:)])
+        [[self currentSubviewController] performSelector:@selector(addCollectionAction:) withObject:sender];
 }
 
 - (IBAction)switchToGridView:(id)sender
 {
-    if([[self currentViewController] respondsToSelector:@selector(switchToGridView:)])
-       [[self currentViewController] performSelector:@selector(switchToGridView:) withObject:sender];
+    if([[self currentSubviewController] respondsToSelector:@selector(switchToGridView:)])
+       [[self currentSubviewController] performSelector:@selector(switchToGridView:) withObject:sender];
 }
 
 - (IBAction)switchToListView:(id)sender
 {
-    if([[self currentViewController] respondsToSelector:@selector(switchToListView:)])
-        [[self currentViewController] performSelector:@selector(switchToListView:) withObject:sender];
-}
-
-- (IBAction)switchToFlowView:(id)sender
-{
-    if([[self currentViewController] respondsToSelector:@selector(switchToFlowView:)])
-        [[self currentViewController] performSelector:@selector(switchToFlowView:) withObject:sender];
+    if([[self currentSubviewController] respondsToSelector:@selector(switchToListView:)])
+        [[self currentSubviewController] performSelector:@selector(switchToListView:) withObject:sender];
 }
 
 - (IBAction)search:(id)sender
 {
-    if([[self currentViewController] respondsToSelector:@selector(search:)])
-        [[self currentViewController] performSelector:@selector(search:) withObject:sender];
+    if([[self currentSubviewController] respondsToSelector:@selector(search:)])
+        [[self currentSubviewController] performSelector:@selector(search:) withObject:sender];
 }
 
 - (IBAction)changeGridSize:(id)sender
 {
-    if([[self currentViewController] respondsToSelector:@selector(changeGridSize:)])
-        [[self currentViewController] performSelector:@selector(changeGridSize:) withObject:sender];
+    if([[self currentSubviewController] respondsToSelector:@selector(changeGridSize:)])
+        [[self currentSubviewController] performSelector:@selector(changeGridSize:) withObject:sender];
 }
 
-- (IBAction)addCollectionAction:(id)sender
-{
-    [[self sidebarController] addCollectionAction:sender];
+- (void)magnifyWithEvent:(NSEvent*)event {
+
+    if(![[[self toolbar] gridSizeSlider] isEnabled])
+        return;
+
+    if(![[self currentSubviewController] respondsToSelector:@selector(changeGridSize:)])
+        return;
+
+    CGFloat zoomChange = [event magnification];
+    CGFloat zoomValue = [[[self toolbar] gridSizeSlider] floatValue];
+
+    [[[self toolbar] gridSizeSlider] setFloatValue:zoomValue+zoomChange];
+    [self changeGridSize:[[self toolbar] gridSizeSlider]];
 }
+
 
 #pragma mark - FileMenu Actions
 
 - (IBAction)newCollection:(id)sender
 {
-    [[self database] addNewCollection:nil];
-    
-    [[self sidebarController] reloadData];
+    if([[self currentSubviewController] respondsToSelector:@selector(addCollectionAction:)])
+        [[self currentSubviewController] performSelector:@selector(addCollectionAction:) withObject:sender];
 }
 
 - (IBAction)newSmartCollection:(id)sender
 {
-    [[self database] addNewSmartCollection:nil];
-    
-    [[self sidebarController] reloadData];
+    // TODO: implement
 }
 
 - (IBAction)newCollectionFolder:(id)sender
 {
-    [[self database] addNewCollectionFolder:nil];
-    
-    [[self sidebarController] reloadData];
+    // TODO: implement
 }
 
 - (IBAction)editSmartCollection:(id)sender
@@ -220,33 +220,111 @@ static const CGFloat _OEToolbarHeight = 44;
 
 - (IBAction)find:(id)sender
 {
-	[[[self view] window] makeFirstResponder:_toolbarSearchField];
+	[[[self view] window] makeFirstResponder:[[self toolbar] searchField]];
 }
 
-#pragma mark - Menu Items
+#pragma mark - Categories
+
+- (IBAction)switchCategory:(id)sender
+{
+    OELibraryCategory category = [[[self toolbar] categorySelector] selectedSegment];
+
+    if(category == _selectedCategory) {
+        return;
+    }
+
+    [self _showSubviewControllerForCategory:category];
+
+    _selectedCategory = category;
+    
+    [[NSUserDefaults standardUserDefaults] setInteger:_selectedCategory forKey:OELibraryLastCategoryKey];
+}
+
+- (NSViewController<OELibrarySubviewController> *)_subviewControllerForCategory:(OELibraryCategory)category
+{
+    NSViewController<OELibrarySubviewController> *viewController = nil;
+
+    switch (category) {
+        case OELibraryCategoryGames:
+            return self.libraryGamesViewController;
+        case OELibraryCategorySaveStates:
+            return self.saveStatesViewController;
+        case OELibraryCategoryScreenshots:
+            return self.screenshotsViewController;
+        case OELibraryCategoryHomebrew:
+            return self.homebrewViewController;
+        default:
+            @throw [NSException exceptionWithName:NSInvalidArgumentException
+                                           reason:@"Unrecognized category."
+                                         userInfo:nil];
+            break;
+    }
+    return viewController;
+}
+
+- (void)_showSubviewControllerForCategory:(OELibraryCategory)category
+{
+    const CGFloat crossfadeDuration = 0.35;
+    
+    NSViewController <OELibrarySubviewController> *newViewController = [self _subviewControllerForCategory:category];
+    NSViewController <OELibrarySubviewController> *currentSubviewController = self.currentSubviewController;
+    
+    newViewController.view.frame = self.view.bounds;
+    newViewController.view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    
+    if(currentSubviewController) {
+        
+        [NSAnimationContext beginGrouping];
+        
+        [[NSAnimationContext currentContext] setDuration:crossfadeDuration];
+        
+        [self transitionFromViewController:currentSubviewController
+                          toViewController:newViewController
+                                   options:NSViewControllerTransitionCrossfade
+                         completionHandler:nil];
+        
+        [NSAnimationContext endGrouping];
+        
+    } else {
+        
+        [self.view addSubview:newViewController.view];
+    }
+    
+    self.currentSubviewController = newViewController;
+
+    [self.view.window makeFirstResponder:newViewController.view];
+}
+
+#pragma mark -
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
 {
-    if([menuItem action] == @selector(newCollectionFolder:)) return NO;
-    
-    if([menuItem action] == @selector(editSmartCollection:))
-        return [[[self sidebarController] selectedSidebarItem] isKindOfClass:[OEDBSmartCollection class]];
-    
-    if([menuItem action] == @selector(startGame:))
-        return [[self currentViewController] respondsToSelector:@selector(selectedGames)] && [[[self currentViewController] selectedGames] count] != 0;
-    
-    if([menuItem action] == @selector(find:))
+    SEL action = [menuItem action];
+    if(action == @selector(newCollectionFolder:)) return NO;
+
+    const id currentSubviewController = [self currentSubviewController];
+
+    if(action == @selector(startSelectedGame:))
     {
-        return [[self toolbarSearchField] isEnabled];
+        return ([currentSubviewController isKindOfClass:[OELibraryGamesViewController class]] && [currentSubviewController respondsToSelector:@selector(selectedGames)] && [[currentSubviewController selectedGames] count] != 0) ||
+            ([currentSubviewController isKindOfClass:[OEMediaViewController class]] && [[currentSubviewController representedObject] isKindOfClass:[OEDBSavedGamesMedia class]] && [[currentSubviewController selectedSaveStates] count] != 0);
     }
-    
-    NSButton *button = nil;
-    if([menuItem action] == @selector(switchToGridView:))
-        button = [self toolbarGridViewButton];
-    else if([menuItem action] == @selector(switchToFlowView:))
-        button = [self toolbarFlowViewButton];
-    else if([menuItem action] == @selector(switchToListView:))
-        button = [self toolbarListViewButton];
+
+    if(action == @selector(startSaveState:))
+    {
+        return [currentSubviewController isKindOfClass:[OEGameCollectionViewController class]] && [currentSubviewController respondsToSelector:@selector(selectedSaveStates)] && [[currentSubviewController selectedSaveStates] count] != 0;
+    }
+
+    if(action == @selector(find:))
+    {
+        return [[[self toolbar] searchField] isEnabled];
+    }
+
+    OEButton *button = nil;
+    if(action == @selector(switchToGridView:))
+        button = [[self toolbar] gridViewButton];
+    else if(action == @selector(switchToListView:))
+        button = [[self toolbar] listViewButton];
     else return YES;
     
     [menuItem setState:[button state]];
@@ -279,17 +357,18 @@ static const CGFloat _OEToolbarHeight = 44;
 }
 
 #pragma mark -
-
-- (IBAction)startGame:(id)sender
+- (IBAction)startSelectedGame:(id)sender
 {
     NSMutableArray *gamesToStart = [NSMutableArray new];
 
-    if([sender isKindOfClass:[OEDBGame class]]) [gamesToStart addObject:sender];
+    if([sender isKindOfClass:[OEDBGame class]]){
+        [gamesToStart addObject:sender];
+    }
     else
     {
-        NSAssert([(id)[self currentViewController] respondsToSelector:@selector(selectedGames)], @"Attempt to start a game from a view controller that doesn't announc selectedGames");
+        NSAssert([(id)[self currentSubviewController] respondsToSelector:@selector(selectedGames)], @"Attempt to start a game from a view controller that doesn't announc selectedGames");
 
-        [gamesToStart addObjectsFromArray:[(id <OELibrarySubviewController>)[self currentViewController] selectedGames]];
+        [gamesToStart addObjectsFromArray:[(id <OELibrarySubviewController>)[self currentSubviewController] selectedGames]];
     }
 
     NSAssert([gamesToStart count] > 0, @"Attempt to start a game while the selection is empty");
@@ -297,6 +376,25 @@ static const CGFloat _OEToolbarHeight = 44;
     if([[self delegate] respondsToSelector:@selector(libraryController:didSelectGame:)])
     {
         for(OEDBGame *game in gamesToStart) [[self delegate] libraryController:self didSelectGame:game];
+    }
+}
+
+- (void)startGame:(OEDBGame*)game
+{
+    [[self delegate] libraryController:self didSelectGame:game];
+}
+
+- (IBAction)startSaveState:(id)sender
+{
+    OEMediaViewController *media = (OEMediaViewController *)[self currentSubviewController];
+    NSArray *statesToLaunch = [media selectedSaveStates];
+
+    if([statesToLaunch count] != 1) return;
+
+    if([[self delegate] respondsToSelector:@selector(libraryController:didSelectSaveState:)])
+    {
+        for(OEDBSaveState *state in statesToLaunch)
+            [[self delegate] libraryController:self didSelectSaveState:state];
     }
 }
 
@@ -310,152 +408,11 @@ static const CGFloat _OEToolbarHeight = 44;
         [[self delegate] libraryController:self didSelectSaveState:saveState];
 }
 
-#pragma mark - Sidebar Helpers
-
-- (void)showViewController:(NSViewController<OELibrarySubviewController> *)nextViewController
-{
-    NSViewController <OELibrarySubviewController> *oldViewController = [self currentViewController];
-    if(nextViewController == oldViewController) return;
-    
-    if([nextViewController respondsToSelector:@selector(setLibraryController:)])
-        [nextViewController setLibraryController:self];
-    
-    [oldViewController viewWillDisappear];
-    [nextViewController viewWillAppear];
-    
-    NSView *newView    = [nextViewController view];    
-    if(oldViewController)
-    {
-        NSView *superView = [[oldViewController view] superview];
-        NSView *oldView   = [oldViewController view];
-        
-        [newView setFrame:[oldView frame]];
-        [newView setAutoresizingMask:[oldView autoresizingMask]];
-        
-        [superView replaceSubview:oldView with:newView];
-    }
-    else
-    {
-        NSView *mainContentView = [self mainContentPlaceholderView];
-        [newView setFrame:[mainContentView bounds]];
-        [mainContentView addSubview:newView];
-    }
-    [self setCurrentViewController:nextViewController];
-    
-    [nextViewController viewDidAppear];
-    [oldViewController viewDidDisappear];
-    if([oldViewController respondsToSelector:@selector(setLibraryController:)])
-        [oldViewController setLibraryController:nil];
-}
-
-- (void)sidebarSelectionDidChange:(NSNotification *)notification
-{    
-    // Save Current State
-    id lastState = [(id <OELibrarySubviewController>)[self currentViewController] encodeCurrentState];
-    id itemID    = [[[self currentViewController] representedObject] sidebarID];
-    [self OE_storeState:lastState forSidebarItemWithID:itemID];
-
-    // Set new item
-    id<OESidebarItem> selectedItem = [[self sidebarController] selectedSidebarItem];
-    if(selectedItem == nil)
-    {
-        DLog(@"nothing selected, this should not be possible, try to enable a random system from the library and select it");
-        return;
-    }
-
-    NSString *viewControllerClasName = [selectedItem viewControllerClassName];
-    NSViewController <OELibrarySubviewController> *viewController = [self viewControllerWithClassName:viewControllerClasName];
-
-    // Make sure the view is loaded (-showViewController:) before setting the represented object.
-    // This prepares the view controller (via its -loadView implementation) so that it can effectively act upon receiving a new
-    // represented object
-    [self showViewController:viewController];
-    [viewController setRepresentedObject:selectedItem];
-
-    itemID = [selectedItem sidebarID];
-    [viewController restoreState:[self OE_storedStateForSidebarItemWithID:itemID]];
-    
-    // Try to select the current system in the controls pref pane
-    // if sidebarID is not a system identifier the preference pane will handle it
-    NSDictionary *userInfo = @{
-                               OEPreferencesUserInfoPanelNameKey : @"Controls",
-                               OEPreferencesUserInfoSystemIdentifierKey : itemID,
-                               };
-    [[NSNotificationCenter defaultCenter] postNotificationName:OEPreferencesSetupPaneNotificationName object:nil userInfo:userInfo];
-}
-
-- (void)OE_storeState:(id)state forSidebarItemWithID:(NSString *)itemID
-{
-    if(!itemID || !state) return;
-    
-    NSUserDefaults      *standardUserDefaults = [NSUserDefaults standardUserDefaults];
-    NSDictionary        *libraryStates        = [standardUserDefaults valueForKey:@"Library States"];
-    NSMutableDictionary *mutableLibraryStates = libraryStates ? [libraryStates mutableCopy] : [NSMutableDictionary dictionary];
-    
-    [mutableLibraryStates setObject:state forKey:itemID];
-    [standardUserDefaults setObject:mutableLibraryStates forKey:@"Library States"];
-    [standardUserDefaults synchronize];
-}
-
-- (id)OE_storedStateForSidebarItemWithID:(NSString *)itemID
-{
-    if(!itemID) return nil;
-    
-    NSUserDefaults      *standardUserDefaults = [NSUserDefaults standardUserDefaults];
-    NSDictionary        *libraryStates        = [standardUserDefaults valueForKey:@"Library States"];
-   
-    return [libraryStates objectForKey:itemID];
-}
-
-#pragma mark - OELibrarySplitViewDelegate
-
-- (void)librarySplitViewDidToggleSidebar:(NSNotification *)notification
-{
-    [self layoutToolbar];
-}
-
-- (void)splitViewDidResizeSubviews:(NSNotification *)notification
-{
-    [self layoutToolbar];
-}
-
 #pragma mark - Private
 
 - (void)OE_showFullscreen:(BOOL)fsFlag animated:(BOOL)animatedFlag
 {
-    [NSApp setPresentationOptions:(fsFlag ? NSApplicationPresentationAutoHideDock | NSApplicationPresentationAutoHideToolbar : NSApplicationPresentationDefault)];
-}
-
-- (NSViewController<OELibrarySubviewController> *)viewControllerWithClassName:(NSString *)className
-{
-    if(![_subviewControllers valueForKey:className])
-    {
-        Class viewControllerClass = NSClassFromString(className);
-        if(viewControllerClass)
-        {
-            NSViewController <OELibrarySubviewController>*viewController = [[viewControllerClass alloc] init];
-            [_subviewControllers setObject:viewController forKey:className];
-        }
-    }
-    return [_subviewControllers valueForKey:className];
-}
-
-#pragma mark -
-
-- (void)layoutToolbar
-{
-    CGFloat splitterPosition = [[self mainSplitView] splitterPosition];
-    NSView *toolbarItemContainer = [[self toolbarSearchField] superview];
-
-    NSRect toolbarItemContainerFrame =
-    {
-        .origin.x = splitterPosition,
-        .origin.y = 0,
-        .size.width = NSWidth([[toolbarItemContainer superview] bounds]) - splitterPosition,
-        .size.height = _OEToolbarHeight
-    };
-
-    [toolbarItemContainer setFrame:toolbarItemContainerFrame];
+    [NSApp setPresentationOptions:(fsFlag ? NSApplicationPresentationAutoHideDock | NSApplicationPresentationAutoHideMenuBar : NSApplicationPresentationDefault)];
 }
 
 @end

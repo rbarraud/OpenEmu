@@ -24,12 +24,8 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
+@import Foundation;
 
 
-@interface OEScrollView : NSScrollView {
-@private
-    
-}
-
+@interface OEScrollView : NSScrollView
 @end

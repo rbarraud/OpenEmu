@@ -24,7 +24,7 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
 #import "OEPlugin.h"
 
 @interface OEShaderPlugin : OEPlugin
@@ -35,11 +35,13 @@
 @interface OEGLSLShaderPlugin : OEShaderPlugin
 @end
 
+#ifdef CG_SUPPORT
 @interface OECGShaderPlugin : OEShaderPlugin
 @end
 
 @interface OEMultipassShaderPlugin : OEShaderPlugin
 @end
+#endif
 
 @interface OEBuiltInShaderPlugin : OEShaderPlugin
 @end

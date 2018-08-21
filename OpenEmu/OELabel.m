@@ -26,11 +26,18 @@
 
 #import "OELabel.h"
 #import "OELabelCell.h"
+#import "OETheme.h"
+
 @implementation OELabel
 
 + (Class)cellClass
 {
     return [OELabelCell class];
+}
+
+- (void)awakeFromNib{
+    [self setDrawsBackground:YES];
+    [self setBackgroundColor:[NSColor clearColor]];
 }
 
 - (void)setThemeKey:(NSString *)key
@@ -107,5 +114,12 @@
     OELabelCell *cell = [self cell];
     return ([cell isKindOfClass:[OELabelCell class]] ? [cell themeTextAttributes] : nil);
 }
+
+
+- (NSSize)intrinsicContentSize
+{
+    return [[self cell] cellSize];
+}
+
 @synthesize backgroundThemeImage=_backgroundThemeImage, themeImage=_themeImage, themeTextAttributes=_themeTextAttributes,trackWindowActivity=_trackWindowActivity,trackMouseActivity=_trackMouseActivity;
 @end

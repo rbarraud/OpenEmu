@@ -24,8 +24,11 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
-#import <ImageKit/ImageKit.h>
+@import Cocoa;
+@import Quartz;
+
+extern NSSize const defaultGridSize;
+extern NSString * const OEImageBrowserGroupSubtitleKey;
 
 typedef enum
 {
@@ -35,8 +38,24 @@ typedef enum
 @interface OEGridView : IKImageBrowserView <NSTextFieldDelegate>
 @property NSImage *proposedImage;
 @property (assign) IKImageBrowserDropOperation draggingOperation;
+
+@property Class cellClass;
+@property (nonatomic, strong) NSString *groupThemeKey;
+@property (nonatomic) BOOL automaticallyMinimizeRowMargin;
+
+- (void)performSetup;
+
+- (void)beginEditingWithSelectedItem:(id)sender;
+- (void)beginEditingItemAtIndex:(NSInteger)index;
+- (void)reloadCellDataAtIndex:(unsigned long long)arg1;
 @end
 
 @protocol OEGridViewMenuSource <NSObject>
 - (NSMenu *)gridView:(OEGridView*)gridView menuForItemsAtIndexes:(NSIndexSet*)indexes;
+@end
+
+@protocol OEGridViewDelegate <NSObject>
+- (void)gridView:(OEGridView*)gridView setTitle:(NSString*)title forItemAtIndex:(NSInteger)index;
+@optional
+- (BOOL)toggleQuickLook;
 @end

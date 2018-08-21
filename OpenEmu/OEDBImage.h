@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2011, OpenEmu Team
+ Copyright (c) 2015, OpenEmu Team
  
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -26,38 +26,39 @@
 
 #import "OEDBItem.h"
 
-typedef enum : NSBitmapImageFileType
+@class OELibraryDatabase, OEDBGame;
+
+NS_ASSUME_NONNULL_BEGIN
+
+typedef NS_ENUM(NSUInteger, OEBitmapImageFileType)
 {
     OEBitmapImageFileTypeOriginal = 7,
     OEBitmapImageFileTypeDefault  = 8,
-} OEBitmapImageFileType;
+};
 
-@class OELibraryDatabase, OEDBGame;
-@interface OEDBImage : OEDBItem
-+ (instancetype)createImageWithNSImage:(NSImage*)image;
-+ (instancetype)createImageWithNSImage:(NSImage*)image type:(OEBitmapImageFileType)type;
-+ (instancetype)createImageWithNSImage:(NSImage*)image type:(OEBitmapImageFileType)type inContext:(NSManagedObjectContext*)context;
+@interface OEDBImage: OEDBItem
 
-+ (instancetype)createImageWithURL:(NSURL*)url;
-+ (instancetype)createImageWithURL:(NSURL*)url type:(OEBitmapImageFileType)type;
-+ (instancetype)createImageWithURL:(NSURL*)url type:(OEBitmapImageFileType)type inContext:(NSManagedObjectContext*)context;
-+ (instancetype)createImageWithData:(NSData*)data;
-+ (instancetype)createImageWithData:(NSData*)data type:(OEBitmapImageFileType)type;
-+ (instancetype)createImageWithData:(NSData*)data type:(OEBitmapImageFileType)type inContext:(NSManagedObjectContext*)context;
++ (nullable NSDictionary <NSString *, id> *)prepareImageWithURLString:(NSString *)URLString;
++ (NSDictionary <NSString *, id> *)prepareImageWithNSImage:(NSImage *)image;
+
++ (instancetype)createImageWithDictionary:(NSDictionary <NSString *, id> *)dictionary;
+
+@property(readonly) BOOL localFilesAvailable;
+
 #pragma mark - Core Data utilities
+
 + (NSString *)entityName;
 + (NSEntityDescription *)entityDescriptionInContext:(NSManagedObjectContext *)context;
 
-- (NSImage *)image;
-- (NSURL *)imageURL;
-- (BOOL)convertToFormat:(OEBitmapImageFileType)format withProperties:(NSDictionary*)attributes;
+@property(readonly) NSImage *image;
+@property(readonly) NSString *UUID;
+@property(nullable, readonly) NSURL *imageURL;
 
-@property (nonatomic) NSURL *sourceURL;
+- (BOOL)convertToFormat:(OEBitmapImageFileType)format withProperties:(NSDictionary *)attributes;
+
+@property (nullable, nonatomic) NSURL *sourceURL;
 @property (readonly, nonatomic, getter = isLocalImageAvailable) BOOL localImageAvailable;
 
-@property (nonatomic) float width, height;
-@property (nonatomic) short format;
-@property (nonatomic, retain) NSString *relativePath;
-@property (nonatomic, retain) NSString * source;
-@property (nonatomic, retain) OEDBGame *Box;
 @end
+
+NS_ASSUME_NONNULL_END

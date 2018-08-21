@@ -41,12 +41,12 @@ OSStatus GenerateThumbnailForURL(void *thisInterface, QLThumbnailRequestRef thum
 
 OSStatus GenerateThumbnailForURL(void *thisInterface, QLThumbnailRequestRef thumbnail, CFURLRef url, CFStringRef contentTypeUTI, CFDictionaryRef options, CGSize maxSize)
 {
-    @autoreleasepool {
+    @autoreleasepool
+    {
+        NSURL *imageUrl = [(__bridge NSURL*)url URLByAppendingPathComponent:@"ScreenShot"];
+        NSImage  *image = [[NSImage alloc] initWithContentsOfURL:imageUrl];
         
-        NSURL *imageUrl = [(NSURL*)url URLByAppendingPathComponent:@"ScreenShot"];
-        NSImage     *image = [[NSImage alloc] initWithContentsOfURL:imageUrl];
-        
-        NSSize  canvasSize = [image size];
+        NSSize canvasSize = [image size];
         
         CGContextRef cgContext = QLThumbnailRequestCreateContext(thumbnail, *(CGSize *)&canvasSize, true, NULL);
         if(cgContext)
@@ -63,7 +63,6 @@ OSStatus GenerateThumbnailForURL(void *thisInterface, QLThumbnailRequestRef thum
             QLThumbnailRequestFlushContext(thumbnail, cgContext);
             CFRelease(cgContext);
         }
-        [image release];
     }
     return noErr;
 }

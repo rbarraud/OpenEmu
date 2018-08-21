@@ -192,6 +192,25 @@
 		<key>OEWSButtonSound</key>
 		<string>OEControllerWiimoteButtonMinus</string>
 	</dict>
+	<key>OEControllerNintendoWiiUProController</key>
+	<dict>
+		<key>OEWSButtonX1</key>
+		<string>OEControllerNintendoWiiUProControllerDPadUp</string>
+		<key>OEWSButtonX3</key>
+		<string>OEControllerNintendoWiiUProControllerDPadDown</string>
+		<key>OEWSButtonX4</key>
+		<string>OEControllerNintendoWiiUProControllerDPadLeft</string>
+		<key>OEWSButtonX2</key>
+		<string>OEControllerNintendoWiiUProControllerDPadRight</string>
+		<key>OEWSButtonA</key>
+		<string>OEControllerNintendoWiiUProControllerButtonY</string>
+		<key>OEWSButtonB</key>
+		<string>OEControllerNintendoWiiUProControllerButtonB</string>
+		<key>OEWSButtonStart</key>
+		<string>OEControllerNintendoWiiUProControllerButtonPlus</string>
+		<key>OEWSButtonSound</key>
+		<string>OEControllerNintendoWiiUProControllerButtonMinus</string>
+	</dict>
 	<key>OEControllerSonyPS4Dualshock4</key>
 	<dict>
 		<key>OEWSButtonX1</key>
@@ -204,6 +223,38 @@
 		<string>OEControllerSonyPS4Dualshock4ButtonOptions</string>
 		<key>OEWSButtonSound</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonShare</string>
+	</dict>
+	<key>OEControllerGCExtendedGamepadProfile</key>
+	<dict>
+		<key>OEWSButtonX1</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadUp</string>
+		<key>OEWSButtonX3</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadDown</string>
+		<key>OEWSButtonX4</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadLeft</string>
+		<key>OEWSButtonX2</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadRight</string>
+		<key>OEWSButtonB</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonA</string>
+		<key>OEWSButtonA</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonX</string>
+		<key>OEWSButtonStart</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonHome</string>
+		<key>OEWSButtonSound</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL1</string>
+	</dict>
+	<key>OEControllerNintendoSwitchProController</key>
+	<dict>
+		<key>OEWSButtonX1</key>
+		<string>OEControllerNintendoSwitchProControllerDPadUp</string>
+		<key>OEWSButtonA</key>
+		<string>OEControllerNintendoSwitchProControllerButtonY</string>
+		<key>OEWSButtonB</key>
+		<string>OEControllerNintendoSwitchProControllerButtonB</string>
+		<key>OEWSButtonStart</key>
+		<string>OEControllerNintendoSwitchProControllerButtonPlus</string>
+		<key>OEWSButtonSound</key>
+		<string>OEControllerNintendoSwitchProControllerButtonMinus</string>
 	</dict>
 </dict>
 </plist>

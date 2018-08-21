@@ -9,7 +9,7 @@
 	<key>CFBundleIconFile</key>
 	<string></string>
 	<key>CFBundleIdentifier</key>
-	<string>org.openemu.${PRODUCT_NAME:rfc1034identifier}</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -123,19 +123,6 @@
 	</array>
 	<key>OENumberOfPlayersKey</key>
 	<integer>1</integer>
-	<key>OERequiredFiles</key>
-	<array>
-		<dict>
-			<key>Description</key>
-			<string>Lynx boot ROM</string>
-			<key>MD5</key>
-			<string>fcd403db69f54290b51035d82f835e7b</string>
-			<key>Name</key>
-			<string>lynxboot.img</string>
-			<key>Size</key>
-			<integer>512</integer>
-		</dict>
-	</array>
 	<key>OEResponderClassKey</key>
 	<string>OELynxSystemResponder</string>
 	<key>OESystemIcon</key>

@@ -49,16 +49,6 @@
     return self;
 }
 
--(id)initImageCell:(NSImage *)image
-{
-    if((self = [super initImageCell:image]))
-    {
-        [self setupAttributes];
-    }
-    
-    return self;
-}
-
 - (id)initTextCell:(NSString *)aString
 {
     if((self = [super initTextCell:aString]))
@@ -96,6 +86,10 @@
     
     [self setTextAttributes:attributes];
     [self setStringValue:[self stringValue]];
-    
+}
+
+- (NSRect)expansionFrameWithFrame:(NSRect)cellFrame inView:(NSView *)view
+{
+    return NSZeroRect;
 }
 @end

@@ -4,9 +4,6 @@
 [submodule "CrabEmu"]
 	path = CrabEmu
 	url = git@github.com:OpenEmu/CrabEmu-Core.git
-[submodule "BSNES"]
-	path = BSNES
-	url = git@github.com:OpenEmu/BSNES-Core.git
 [submodule "FCEU"]
 	path = FCEU
 	url = git@github.com:OpenEmu/FCEU-Core.git
@@ -22,21 +19,12 @@
 [submodule "Mupen64Plus"]
 	path = Mupen64Plus
 	url = git@github.com:OpenEmu/Mupen64Plus-Core.git
-[submodule "NeoPop"]
-	path = NeoPop
-	url = git@github.com:OpenEmu/NeoPop-Core.git
 [submodule "Nestopia"]
 	path = Nestopia
 	url = git@github.com:OpenEmu/Nestopia-Core.git
 [submodule "SNES9x"]
 	path = SNES9x
 	url = git@github.com:OpenEmu/SNES9x-Core.git
-[submodule "VisualBoyAdvance"]
-	path = VisualBoyAdvance
-	url = git@github.com:OpenEmu/VisualBoyAdvance-Core.git
-[submodule "TwoMbit"]
-	path = TwoMbit
-	url = git@github.com:OpenEmu/TwoMbit-Core.git
 [submodule "UME"]
 	path = UME
 	url = git@github.com:OpenEmu/UME-Core.git
@@ -49,9 +37,6 @@
 [submodule "PPSSPP"]
 	path = PPSSPP
 	url = git@github.com:OpenEmu/PPSSPP-Core.git
-[submodule "yabause"]
-	path = yabause
-	url = git@github.com:OpenEmu/yabause.git
 [submodule "VecXGL"]
 	path = VecXGL
 	url = git@github.com:OpenEmu/VecXGL-Core.git
@@ -73,3 +58,27 @@
 [submodule "VirtualJaguar"]
 	path = VirtualJaguar
 	url = git@github.com:OpenEmu/VirtualJaguar-Core.git
+[submodule "O2EM"]
+	path = O2EM
+	url = git@github.com:OpenEmu/O2EM-Core.git
+[submodule "Bliss"]
+	path = Bliss
+	url = git@github.com:OpenEmu/Bliss-Core.git
+[submodule "Potator-Core"]
+	path = Potator-Core
+	url = https://github.com/OpenEmu/Potator-Core.git
+[submodule "PokeMini"]
+	path = PokeMini
+	url = git@github.com:OpenEmu/PokeMini-Core
+[submodule "Reicast"]
+	path = Reicast
+	url = git@github.com:OpenEmu/Reicast-Core.git
+[submodule "VirtualC64"]
+	path = VirtualC64
+	url = git@github.com:OpenEmu/VirtualC64-Core.git
+[submodule "mGBA"]
+	path = mGBA
+	url = git@github.com:OpenEmu/mGBA-Core.git
+[submodule "OpenEmuXPCCommunicator"]
+	path = OpenEmuXPCCommunicator
+	url = git@github.com:OpenEmu/OpenEmuXPCCommunicator.git

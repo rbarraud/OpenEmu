@@ -24,73 +24,56 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
 
-#import "OEUIDrawingUtils.h"
 #import "OEMainWindowContentController.h"
-#import "OELibraryDatabase.h"
 #import "OELibrarySplitView.h"
-#import "OEButton.h"
 
 @class OELibraryDatabase;
 @class OESidebarController;
 @class OELibrarySplitView;
+@class OELibraryToolbar;
+@class OEDBGame;
+
+extern NSString * const OELibraryStatesKey;
+extern NSString * const OELibraryLastCategoryKey;
 
 @protocol OELibraryControllerDelegate, OELibrarySubviewController;
-
-@interface OELibraryController : NSViewController <OEMainWindowContentController, OELibrarySplitViewDelegate>
-- (void)layoutToolbar;
+@interface OELibraryController : NSViewController <OEMainWindowContentController>
 
 @property(unsafe_unretained) id<OELibraryControllerDelegate> delegate;
 
 - (void)startSelectedGameWithSaveState:(id)stateItem;
 
-#pragma mark -
-#pragma mark Toolbar Actions
-- (IBAction)toggleSidebar:(id)sender;
+#pragma mark - Toolbar Actions
 - (IBAction)switchToGridView:(id)sender;
 - (IBAction)switchToListView:(id)sender;
-- (IBAction)switchToFlowView:(id)sender;
 - (IBAction)search:(id)sender;
 - (IBAction)changeGridSize:(id)sender;
 - (IBAction)addCollectionAction:(id)sender;
 
-#pragma mark -
-#pragma mark Menu Item Actions
+#pragma mark - Menu Item Actions
 - (IBAction)newCollection:(id)sender;
 - (IBAction)newSmartCollection:(id)sender;
 - (IBAction)newCollectionFolder:(id)sender;
 
+#pragma mark - Menu Item Actions
 - (IBAction)editSmartCollection:(id)sender;
 - (IBAction)addToLibrary:(id)sender;
-- (IBAction)startGame:(id)sender;
+- (void)startGame:(OEDBGame*)game;
+- (IBAction)startSelectedGame:(id)sender;
+- (IBAction)startSaveState:(id)sender;
 
-#pragma mark -
-#pragma mark Menu Items
+#pragma mark - Custom Views
+- (IBAction)switchCategory:(id)sender;
+
+#pragma mark - Menu Items
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem;
 
-#pragma mark -
-#pragma mark Properties
-@property (nonatomic, getter=isSidebarVisible) BOOL sidebarVisible;
-@property (strong)    OELibraryDatabase *database;
-
-@property (strong) IBOutlet OESidebarController         *sidebarController;
-@property (strong) NSViewController <OELibrarySubviewController> *currentViewController;
-
-@property (strong) IBOutlet OELibrarySplitView           *mainSplitView;
-@property (strong) IBOutlet NSView                       *mainContentPlaceholderView;
-
-@property (strong) IBOutlet OEButton      *toolbarSidebarButton;
-@property (strong) IBOutlet OEButton      *toolbarGridViewButton;
-@property (strong) IBOutlet OEButton      *toolbarFlowViewButton;
-@property (strong) IBOutlet OEButton      *toolbarListViewButton;
-
-@property (strong) IBOutlet OEButton      *toolbarAddToSidebarButton;
-@property (strong) IBOutlet NSSearchField *toolbarSearchField;
-@property (strong) IBOutlet NSSlider      *toolbarSlider;
-
-- (void)showViewController:(NSViewController<OELibrarySubviewController> *)nextViewController;
-
+#pragma mark - Properties
+@property (strong) OELibraryDatabase *database;
+@property (nonatomic, readonly) NSViewController <OELibrarySubviewController> *currentSubviewController;
+@property (strong) IBOutlet OELibraryToolbar *toolbar;
 @end
 
 @class OEDBGame, OEDBRom, OEDBSaveState;

@@ -24,9 +24,9 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
 #import "OEControl.h"
 
 @interface OEBackgroundColorView : NSView <OEControl>
-@property (copy, nonatomic) NSColor *backgroundColor;
+@property (copy, nonatomic) IBInspectable NSColor *backgroundColor;
 @end

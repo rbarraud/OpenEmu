@@ -24,7 +24,7 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
+@import Foundation;
 
 
 @protocol OESidebarItem <NSObject>
@@ -40,4 +40,7 @@
 - (BOOL)isGroupHeaderInSidebar;
 
 - (BOOL)hasSubCollections;
+
+@optional
+- (NSString*)badge;
 @end

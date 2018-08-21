@@ -26,56 +26,54 @@
 
 #import "OEGameView.h"
 
+#import <OpenEmuSystem/OpenEmuSystem.h>
 #import "OEGameDocument.h"
-#import "OECompositionPlugin.h"
-#import "OEShaderPlugin.h"
 
+#import "OEShaderPlugin.h"
 #import "OEGameShader.h"
 #import "OEGLSLShader.h"
-#import "OECGShader.h"
-#import "OEMultipassShader.h"
-
 #import "OEBuiltInShader.h"
 
-#import "OEDOGameCoreHelper.h"
+#ifdef CG_SUPPORT
+#import "OECGShader.h"
+#import "OEMultipassShader.h"
+#import "OELUTTexture.h"
+#endif
 
-#import <OpenEmuSystem/OpenEmuSystem.h>
+#import "OEGameViewNotificationRenderer.h"
+
+@import IOSurface;
+@import Accelerate;
 #import <OpenGL/CGLMacro.h>
-#import <IOSurface/IOSurface.h>
 #import <OpenGL/CGLIOSurface.h>
-#import <Accelerate/Accelerate.h>
+#import <Syphon/Syphon.h>
 
 #import "snes_ntsc.h"
 
-// TODO: bind vsync. Is it even necessary, why do we want it off at all?
-
-#pragma mark -
-
-#if CGFLOAT_IS_DOUBLE
-#define CGFLOAT_EPSILON DBL_EPSILON
-#else
-#define CGFLOAT_EPSILON FLT_EPSILON
-#endif
-
-#pragma mark -
-#pragma mark Display Link
-
 NSString * const OEScreenshotAspectRationCorrectionDisabled = @"disableScreenshotAspectRatioCorrection";
+NSString * const OEDefaultVideoFilterKey = @"videoFilter";
 
-static CVReturn MyDisplayLinkCallback(CVDisplayLinkRef displayLink,const CVTimeStamp *inNow,const CVTimeStamp *inOutputTime,CVOptionFlags flagsIn,CVOptionFlags *flagsOut,void *displayLinkContext)
-{
-    return [(__bridge OEGameView *)displayLinkContext displayLinkRenderCallback:inOutputTime];
-}
-
-static const GLfloat cg_coords[] =
-{
+#ifdef CG_SUPPORT
+static const GLfloat cg_coords[] = {
     0, 0,
     1, 0,
     1, 1,
     0, 1
 };
+#endif
 
-static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
+@interface OEGameView ()
+// Rendering methods
+- (void)setupDisplayLink;
+- (void)tearDownDisplayLink;
+- (CVReturn)displayLinkRenderCallback:(const CVTimeStamp *)timeStamp;
+- (void)render;
+
+@property NSRect cachedBounds;
+@property NSRect cachedBoundsOnWindow;
+@property NSSize cachedFrameSize;
+@property OEGameViewNotificationRenderer *notificationRenderer;
+@end
 
 @implementation OEGameView
 {
@@ -86,6 +84,8 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     GLuint             _gameTexture;
     IOSurfaceID        _gameSurfaceID;
     IOSurfaceRef       _gameSurfaceRef;
+
+#ifdef CG_SUPPORT
     GLuint            *_rttFBOs;
     GLuint            *_rttGameTextures;
     NSUInteger         _frameCount;
@@ -93,6 +93,8 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     GLuint            *_multipassTextures;
     GLuint            *_multipassFBOs;
     OEIntSize         *_multipassSizes;
+    GLuint            *_lutTextures;
+#endif
 
     snes_ntsc_t       *_ntscTable;
     uint16_t          *_ntscSource;
@@ -105,27 +107,63 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     OEIntSize          _gameScreenSize;
     OEIntSize          _gameAspectSize;
     CVDisplayLinkRef   _gameDisplayLinkRef;
-    SyphonServer      *_gameServer;
 
-    // QC based filters
-    CIImage           *_gameCIImage;
-    QCRenderer        *_filterRenderer;
-    CGColorSpaceRef    _rgbColorSpace;
+    // Filters
     NSTimeInterval     _filterTime;
-    NSDate            *_filterStartTime;
+    NSDate            *_filterStartDate;
     BOOL               _filterHasOutputMousePositionKeys;
+
+    // Save State Notifications
+    GLuint _saveStateTexture;
 }
 
-- (NSDictionary *)OE_shadersForContext:(CGLContextObj)context
+- (instancetype)initWithFrame:(NSRect)frameRect
 {
-    NSMutableDictionary *shaders = [NSMutableDictionary dictionary];
+    self = [super initWithFrame:frameRect];
+    if (self)
+    {
+        // Make sure we have a screen size set so _prepareGameTexture does not fail
+        _gameScreenSize = (OEIntSize){.width=1, .height=1};
 
-    for(OEShaderPlugin *plugin in [OEShaderPlugin allPlugins])
-        shaders[[plugin name]] = [plugin shaderWithContext:context];
-
-    return shaders;
+        self.wantsBestResolutionOpenGLSurface = YES;
+    }
+    return self;
 }
 
+- (instancetype)initWithCoder:(NSCoder *)coder
+{
+    self = [super initWithCoder:coder];
+    if (self)
+    {
+        // Make sure we have a screen size set so _prepareGameTexture does not fail
+        _gameScreenSize = (OEIntSize){.width=1, .height=1};
+
+        self.wantsBestResolutionOpenGLSurface = YES;
+    }
+    return self;
+}
+
+- (void)dealloc
+{
+    [self unbind:@"filterName"];
+
+    DLog(@"OEGameView dealloc");
+    [self tearDownDisplayLink];
+
+#ifdef SYPHON_SUPPORT
+    [self stopSyphon];
+#endif
+
+    // filters
+    [self setFilters:nil];
+
+    if(_gameSurfaceRef != NULL) {
+        CFRelease(_gameSurfaceRef);
+        _gameSurfaceRef = NULL;
+    }
+}
+
+#pragma mark - OpenGL Setup
 + (NSOpenGLPixelFormat *)defaultPixelFormat
 {
     // choose our pixel formats
@@ -140,24 +178,62 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     return [[NSOpenGLPixelFormat alloc] initWithAttributes:attr];
 }
 
-// Warning: - because we are using a superview with a CALayer for transitioning, we have prepareOpenGL called more than once.
-// What to do about that?
 - (void)prepareOpenGL
 {
     [super prepareOpenGL];
 
-    DLog(@"prepareOpenGL");
-    // Synchronize buffer swaps with vertical refresh rate
-    GLint swapInt = 1;
-
-    [[self openGLContext] setValues:&swapInt forParameter:NSOpenGLCPSwapInterval];
-
     CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
     CGLLockContext(cgl_ctx);
+
+    // Warning: because we are using a superview with a CALayer for transitioning, we have prepareOpenGL called more than once.
+    if(_openGLContextIsSetup)
+    {
+        CGLUnlockContext(cgl_ctx);
+        return;
+    }
+
+    // Synchronize buffer swaps with vertical refresh rate
+    GLint value = 1;
+    CGLSetParameter(cgl_ctx, kCGLCPSwapInterval, &value);
+
+    [self _prepareGameTexture];
+
+#ifdef CG_SUPPORT
+    [self _prepareMultipassFilter];
+#endif
+
+    [self _prepareBlarggsFilter];
+    [self _applyBackgroundColor];
+
+    [self _prepareAvailableFilters];
+
+#ifdef SYPHON_SUPPORT
+    [self startSyphon];
+#endif
+
+    _notificationRenderer = [[OEGameViewNotificationRenderer alloc] init];
+    [_notificationRenderer setScaleFactor:[[self window] backingScaleFactor]];
+    [_notificationRenderer setAspectSize:_gameAspectSize];
+    [_notificationRenderer setupInContext:[self openGLContext]];
+
+    _openGLContextIsSetup = YES;
+
+    CGLUnlockContext(cgl_ctx);
+
+    // rendering
+    [self setupDisplayLink];
+    [self rebindIOSurface];
+}
+
+- (void)_prepareGameTexture
+{
+    // NOTE: only call when cgl_ctx is locked and current
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
 
     // GL resources
     glGenTextures(1, &_gameTexture);
 
+#ifdef CG_SUPPORT
     // Resources for render-to-texture pass
     _rttGameTextures = (GLuint *) malloc(OEFramesSaved * sizeof(GLuint));
     _rttFBOs         = (GLuint *) malloc(OEFramesSaved * sizeof(GLuint));
@@ -174,22 +250,28 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
         glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, _rttGameTextures[i], 0);
     }
 
-    if([self backgroundColor])
-    {
-        NSColor *color = [self backgroundColor];
-        glClearColor([color redComponent], [color greenComponent], [color blueComponent], [color alphaComponent]);
-    }
-
     GLenum status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
     if(status != GL_FRAMEBUFFER_COMPLETE_EXT)
         NSLog(@"failed to make complete framebuffer object %x", status);
 
+    _frameCount = 0;
+#endif
+}
+
+#ifdef CG_SUPPORT
+- (void)_prepareMultipassFilter
+{
+    // NOTE: only call when cgl_ctx is locked and current
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
+
     // Resources for multipass-rendering
     _multipassTextures = (GLuint *) malloc(OEMultipasses * sizeof(GLuint));
     _multipassFBOs     = (GLuint *) malloc(OEMultipasses * sizeof(GLuint));
+    _lutTextures       = (GLuint *) malloc(OELUTTextures * sizeof(GLuint));
 
     glGenTextures(OEMultipasses, _multipassTextures);
     glGenFramebuffersEXT(OEMultipasses, _multipassFBOs);
+    glGenTextures(OELUTTextures, _lutTextures);
 
     for(NSUInteger i = 0; i < OEMultipasses; ++i)
     {
@@ -202,6 +284,13 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     }
 
     glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+}
+#endif
+
+- (void)_prepareBlarggsFilter
+{
+    // NOTE: only call when cgl_ctx is locked and current
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
 
     // Setup resources needed for Blargg's NTSC filter
     _ntscMergeFields = 1;
@@ -229,32 +318,60 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     glBindTexture(GL_TEXTURE_2D, 0);
+}
 
-    _frameCount = 0;
+- (void)_prepareAvailableFilters
+{
+    // NOTE: only call when cgl_ctx is locked and current
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
 
-    _filters = [self OE_shadersForContext:cgl_ctx];
-    _gameServer = [[SyphonServer alloc] initWithName:self.gameTitle context:cgl_ctx options:nil];
+    // Setup available shaders
+    NSMutableDictionary *availableFilters = [NSMutableDictionary dictionary];
 
-    CGLUnlockContext(cgl_ctx);
+    for(OEShaderPlugin *plugin in [OEShaderPlugin allPlugins])
+        availableFilters[[plugin name]] = [plugin shaderWithContext:cgl_ctx];
 
-    // filters
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [self setFilters:availableFilters];
+
+    // Pick default filter
+    NSUserDefaults *defaults   = [NSUserDefaults standardUserDefaults];
     NSString *systemIdentifier = [[self delegate] systemIdentifier];
-    NSString *filter;
-    filter = [defaults objectForKey:[NSString stringWithFormat:@"videoFilter.%@", systemIdentifier]];
+    NSString *systemFilterKey  = [NSString stringWithFormat:@"videoFilter.%@", systemIdentifier];
+    NSString *filter = [defaults objectForKey:systemFilterKey];
     if(filter == nil)
-        filter = [defaults objectForKey:_OEDefaultVideoFilterKey];
+        filter = [defaults objectForKey:OEDefaultVideoFilterKey] ?: @"Nearest Neighbor";
 
     [self setFilterName:filter];
+}
+#pragma mark -
+- (void)showQuickSaveNotification
+{
+    [_notificationRenderer showQuickStateNotification];
+}
 
-    // our texture is in NTSC colorspace from the cores
-    _rgbColorSpace = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+- (void)showScreenShotNotification
+{
+    [_notificationRenderer showScreenShotNotification];
+}
 
-    // rendering
-    [self setupDisplayLink];
-    [self rebindIOSurface];
+- (void)showFastForwardNotification:(BOOL)enable
+{
+    [_notificationRenderer showFastForwardNotification:enable];
+}
 
-    _openGLContextIsSetup = YES;
+- (void)showRewindNotification:(BOOL)enable
+{
+    [_notificationRenderer showRewindNotification:enable];
+}
+
+- (void)showStepForwardNotification
+{
+    [_notificationRenderer showStepForwardNotification];
+}
+
+- (void)showStepBackwardNotification
+{
+    [_notificationRenderer showStepBackwardNotification];
 }
 
 - (void)setEnableVSync:(BOOL)enable
@@ -271,19 +388,8 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
         CVDisplayLinkStart(_gameDisplayLinkRef);
 }
 
-- (void)setGameTitle:(NSString *)title
-{
-    if(_gameTitle != title)
-    {
-        _gameTitle = [title copy];
-        [_gameServer setName:title];
-    }
-}
-
 - (void)removeFromSuperview
 {
-    DLog(@"removeFromSuperview");
-
     CVDisplayLinkStop(_gameDisplayLinkRef);
 
     [super removeFromSuperview];
@@ -291,16 +397,19 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
 - (void)clearGLContext
 {
-    if(!_openGLContextIsSetup) return;
-
     DLog(@"clearGLContext");
-
     CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
     CGLLockContext(cgl_ctx);
+    if(!_openGLContextIsSetup)
+    {
+        CGLUnlockContext(cgl_ctx);
+        return;
+    }
 
     glDeleteTextures(1, &_gameTexture);
     _gameTexture = 0;
 
+#ifdef CG_SUPPORT
     glDeleteTextures(OEFramesSaved, _rttGameTextures);
     free(_rttGameTextures);
     _rttGameTextures = 0;
@@ -315,6 +424,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     glDeleteFramebuffersEXT(OEMultipasses, _multipassFBOs);
     free(_multipassFBOs);
     _multipassFBOs = 0;
+#endif
 
     free(_ntscTable);
     _ntscTable = 0;
@@ -325,56 +435,22 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     glDeleteTextures(1, &_ntscTexture);
     _ntscTexture = 0;
 
+    glDeleteTextures(1, &_saveStateTexture);
+    _saveStateTexture = 0;
+
+#ifdef CG_SUPPORT
     free(_multipassSizes);
     _multipassSizes = 0;
 
+    glDeleteTextures(OELUTTextures, _lutTextures);
+    free(_lutTextures);
+    _lutTextures = 0;
+#endif
+
+    _openGLContextIsSetup = NO;
+
     CGLUnlockContext(cgl_ctx);
     [super clearGLContext];
-}
-
-- (void)setupDisplayLink
-{
-    if(_gameDisplayLinkRef) [self tearDownDisplayLink];
-
-    CVReturn error = CVDisplayLinkCreateWithActiveCGDisplays(&_gameDisplayLinkRef);
-    if(error != kCVReturnSuccess)
-    {
-        NSLog(@"DisplayLink could notbe created for active displays, error:%d", error);
-        _gameDisplayLinkRef = NULL;
-        return;
-    }
-
-    error = CVDisplayLinkSetOutputCallback(_gameDisplayLinkRef, &MyDisplayLinkCallback, (__bridge void *)self);
-	if(error != kCVReturnSuccess)
-    {
-        NSLog(@"DisplayLink could not link to callback, error:%d", error);
-        CVDisplayLinkRelease(_gameDisplayLinkRef);
-        _gameDisplayLinkRef = NULL;
-        return;
-    }
-
-    // Set the display link for the current renderer
-    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
-    CGLPixelFormatObj cglPixelFormat = CGLGetPixelFormat(cgl_ctx);
-
-    error = CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(_gameDisplayLinkRef, cgl_ctx, cglPixelFormat);
-	if(error != kCVReturnSuccess)
-    {
-        NSLog(@"DisplayLink could not link to GL Context, error:%d", error);
-        CVDisplayLinkRelease(_gameDisplayLinkRef);
-        _gameDisplayLinkRef = NULL;
-        return;
-    }
-
-    CVDisplayLinkStart(_gameDisplayLinkRef);
-
-	if(!CVDisplayLinkIsRunning(_gameDisplayLinkRef))
-	{
-        CVDisplayLinkRelease(_gameDisplayLinkRef);
-        _gameDisplayLinkRef = NULL;
-
-		NSLog(@"DisplayLink is not running - it should be. ");
-	}
 }
 
 - (void)rebindIOSurface
@@ -389,7 +465,107 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
     glEnable(GL_TEXTURE_RECTANGLE_EXT);
     glBindTexture(GL_TEXTURE_RECTANGLE_EXT, _gameTexture);
-    CGLTexImageIOSurface2D(cgl_ctx, GL_TEXTURE_RECTANGLE_EXT, GL_RGB8, (int)IOSurfaceGetWidth(_gameSurfaceRef), (int)IOSurfaceGetHeight(_gameSurfaceRef), GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, _gameSurfaceRef, 0);
+
+    int width = (int)IOSurfaceGetWidth(_gameSurfaceRef);
+    int height = (int)IOSurfaceGetHeight(_gameSurfaceRef);
+
+    CGLTexImageIOSurface2D(cgl_ctx, GL_TEXTURE_RECTANGLE_EXT, GL_RGB8, width, height, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, _gameSurfaceRef, 0);
+}
+#pragma mark - 
+- (void)setBackgroundColor:(NSColor *)backgroundColor
+{
+    _backgroundColor = backgroundColor;
+
+    if(_openGLContextIsSetup)
+    {
+        [self _applyBackgroundColor];
+    }
+}
+
+- (void)_applyBackgroundColor
+{
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
+    CGLSetCurrentContext(cgl_ctx);
+
+    NSColor *color = [self backgroundColor];
+
+    CGFloat colors[4] = { 0.0, 0.0, 0.0, 1.0 };
+    if([[color colorSpace] numberOfColorComponents] == 3)
+    {
+        colors[0] = [color redComponent];
+        colors[1] = [color greenComponent];
+        colors[2] = [color blueComponent];
+        colors[3] = [color alphaComponent];
+    }
+    else if([[color colorSpace] numberOfColorComponents] == 1)
+    {
+        colors[0] = [color whiteComponent];
+        colors[1] = [color whiteComponent];
+        colors[2] = [color whiteComponent];
+    }
+
+    glClearColor(colors[0], colors[1], colors[2], colors[3]);
+}
+
+#pragma mark - Display Link
+static CVReturn OEGameViewDisplayLinkCallback(CVDisplayLinkRef displayLink,const CVTimeStamp *inNow,const CVTimeStamp *inOutputTime,CVOptionFlags flagsIn,CVOptionFlags *flagsOut,void *displayLinkContext)
+{
+    return [(__bridge OEGameView *)displayLinkContext displayLinkRenderCallback:inOutputTime];
+}
+- (void)setupDisplayLink
+{
+    if(_gameDisplayLinkRef) [self tearDownDisplayLink];
+
+    CVReturn error = CVDisplayLinkCreateWithActiveCGDisplays(&_gameDisplayLinkRef);
+    if(error != kCVReturnSuccess)
+    {
+        NSLog(@"DisplayLink could notbe created for active displays, error:%d", error);
+        _gameDisplayLinkRef = NULL;
+        return;
+    }
+
+    error = CVDisplayLinkSetOutputCallback(_gameDisplayLinkRef, &OEGameViewDisplayLinkCallback, (__bridge void *)self);
+    if(error != kCVReturnSuccess)
+    {
+        NSLog(@"DisplayLink could not link to callback, error:%d", error);
+        CVDisplayLinkRelease(_gameDisplayLinkRef);
+        _gameDisplayLinkRef = NULL;
+        return;
+    }
+
+    // Set the display link for the current renderer
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
+    CGLPixelFormatObj cglPixelFormat = CGLGetPixelFormat(cgl_ctx);
+
+    error = CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(_gameDisplayLinkRef, cgl_ctx, cglPixelFormat);
+    if(error != kCVReturnSuccess)
+    {
+        NSLog(@"DisplayLink could not link to GL Context, error:%d", error);
+        CVDisplayLinkRelease(_gameDisplayLinkRef);
+        _gameDisplayLinkRef = NULL;
+        return;
+    }
+
+    CVDisplayLinkStart(_gameDisplayLinkRef);
+
+    if(!CVDisplayLinkIsRunning(_gameDisplayLinkRef))
+    {
+        CVDisplayLinkRelease(_gameDisplayLinkRef);
+        _gameDisplayLinkRef = NULL;
+
+        NSLog(@"DisplayLink is not running - it should be. ");
+    }
+
+    // Log display's nominal refresh rate
+    CVTime nominal = CVDisplayLinkGetNominalOutputVideoRefreshPeriod(_gameDisplayLinkRef);
+    double refreshRate;
+    if(!(nominal.flags & kCVTimeIsIndefinite))
+    {
+        refreshRate = (double)nominal.timeScale / (double)nominal.timeValue;
+        NSLog(@"Display's nominal refresh rate is %.2f Hz", refreshRate);
+    }
+    else
+        NSLog(@"DisplayLink cannot determine your display's video refresh period.");
 }
 
 - (void)tearDownDisplayLink
@@ -401,8 +577,6 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
     CVDisplayLinkStop(_gameDisplayLinkRef);
 
-    CVDisplayLinkSetOutputCallback(_gameDisplayLinkRef, NULL, NULL);
-
     // we really ought to wait.
     while(CVDisplayLinkIsRunning(_gameDisplayLinkRef))
         DLog(@"waiting for displaylink to stop");
@@ -413,46 +587,56 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     CGLUnlockContext(cgl_ctx);
 }
 
-- (void)dealloc
+#pragma mark - Syphon Support
+#ifdef SYPHON_SUPPORT
+@synthesize syphonServer=_syphonServer, syphonTitle=_syphonTitle;
+- (void)setSyphonTitle:(NSString *)title
 {
-    [self unbind:@"filterName"];
-
-    DLog(@"OEGameView dealloc");
-    [self tearDownDisplayLink];
-
-    [_gameServer setName:@""];
-    [_gameServer stop];
-    _gameServer = nil;
-
-    _gameCIImage = nil;
-
-    // filters
-    self.filters = nil;
-    _filterRenderer = nil;
-
-    CGColorSpaceRelease(_rgbColorSpace);
-    _rgbColorSpace = NULL;
-
-    if(_gameSurfaceRef != NULL) CFRelease(_gameSurfaceRef);
+    _syphonTitle = [title copy];
+    [[self syphonServer] setName:title];
 }
 
-#pragma mark -
-#pragma mark Rendering
+- (void)startSyphon
+{
+    // NOTE: only call when cgl_ctx is locked and current
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
+    NSString *syphonTitle = [self syphonTitle];
+    _syphonServer = [[SyphonServer alloc] initWithName:syphonTitle context:cgl_ctx options:nil];
+}
 
+- (void)stopSyphon
+{
+    // Stop Syphon Server
+    SyphonServer *syphonServer = [self syphonServer];
+    [syphonServer setName:@""];
+    [syphonServer stop];
+    _syphonServer = nil;
+}
+#endif
+
+#pragma mark - Rendering
 - (void)reshape
 {
-//    DLog(@"reshape");
-
     CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
     CGLSetCurrentContext(cgl_ctx);
-	CGLLockContext(cgl_ctx);
-    
-	[self update];
+    CGLLockContext(cgl_ctx);
 
-	NSRect mainRenderViewFrame = [self frame];
-	glViewport(0, 0, mainRenderViewFrame.size.width, mainRenderViewFrame.size.height);
+    self.cachedFrameSize = self.frame.size;
+    self.cachedBounds = self.bounds;
+    self.cachedBoundsOnWindow = [self convertRectToBacking:self.bounds];
 
-	CGLUnlockContext(cgl_ctx);
+    [self update];
+    [self updateViewport];
+
+    CGLUnlockContext(cgl_ctx);
+}
+
+- (void)updateViewport
+{
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
+
+    const NSRect boundsOnWindow = self.cachedBoundsOnWindow;
+    glViewport(0, 0, NSWidth(boundsOnWindow),NSHeight(boundsOnWindow));
 }
 
 - (void)drawRect:(NSRect)dirtyRect
@@ -462,36 +646,30 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
 - (void)render
 {
-    // FIXME: Why not using the timestamps passed by parameters ?
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
+    CGLSetCurrentContext(cgl_ctx);
+    CGLLockContext(cgl_ctx);
+
+    glClear(GL_COLOR_BUFFER_BIT);
+
     // rendering time for QC filters..
-    if(_filterStartTime == 0)
+    if(_filterStartDate == nil)
     {
-        _filterStartTime = [NSDate date];
+        _filterStartDate = [NSDate date];
     }
 
-    _filterTime = [[NSDate date] timeIntervalSinceDate:_filterStartTime];
+    _filterTime = [[NSDate date] timeIntervalSinceDate:_filterStartDate];
 
+#ifdef CG_SUPPORT
     // Just assume 60 fps, this isn't critical
     _gameFrameCount = _filterTime * 60;
+#endif
 
     if(_gameSurfaceRef == NULL) [self rebindIOSurface];
 
     // get our IOSurfaceRef from our passed in IOSurfaceID from our background process.
     if(_gameSurfaceRef != NULL)
     {
-        //NSDictionary *options = [NSDictionary dictionaryWithObject:(__bridge id)_rgbColorSpace forKey:kCIImageColorSpace];
-        CGRect textureRect = CGRectMake(0, 0, _gameScreenSize.width, _gameScreenSize.height);
-
-        CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
-
-        [[self openGLContext] makeCurrentContext];
-
-        CGLLockContext(cgl_ctx);
-
-        // always set the CIImage, so save states save
-        // TODO: Since screenshots do not use gameCIImage anymore, should we remove it as a property?
-        //[self setGameCIImage:[[CIImage imageWithIOSurface:_gameSurfaceRef options:options] imageByCroppingToRect:textureRect]];
-
         OEGameShader *shader = [_filters objectForKey:_filterName];
 
         glMatrixMode(GL_PROJECTION);
@@ -500,49 +678,27 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
 
+        [self updateViewport];
+
         if(shader != nil)
             [self OE_drawSurface:_gameSurfaceRef inCGLContext:cgl_ctx usingShader:shader];
-        else
-        {
-            // Since our filters no longer rely on QC, it may not be around.
-            if(_filterRenderer == nil) [self OE_refreshFilterRenderer];
 
-            if(_filterRenderer != nil)
-            {
-                NSDictionary *arguments = nil;
+#ifdef SYPHON_SUPPORT
+        CGRect textureRect = CGRectMake(0, 0, _gameScreenSize.width, _gameScreenSize.height);
+        SyphonServer *syphonServer = [self syphonServer];
+        if([syphonServer hasClients])
+            [syphonServer publishFrameTexture:_gameTexture textureTarget:GL_TEXTURE_RECTANGLE_ARB imageRegion:textureRect textureDimensions:textureRect.size flipped:NO];
+#endif
 
-                NSWindow *gameWindow = [self window];
-                NSRect  frame = [self frame];
-                NSPoint mouseLocation = [gameWindow mouseLocationOutsideOfEventStream];
-
-                mouseLocation.x /= frame.size.width;
-                mouseLocation.y /= frame.size.height;
-
-                arguments = [NSDictionary dictionaryWithObjectsAndKeys:
-                             [NSValue valueWithPoint:mouseLocation], QCRendererMouseLocationKey,
-                             [gameWindow currentEvent], QCRendererEventKey,
-                             nil];
-
-                [_filterRenderer setValue:_gameCIImage forInputKey:@"OEImageInput"];
-                [_filterRenderer renderAtTime:_filterTime arguments:arguments];
-            }
-        }
-
-        if([_gameServer hasClients])
-            [_gameServer publishFrameTexture:_gameTexture textureTarget:GL_TEXTURE_RECTANGLE_ARB imageRegion:textureRect textureDimensions:textureRect.size flipped:NO];
-
-        [[self openGLContext] flushBuffer];
-
-        CGLUnlockContext(cgl_ctx);
+        [_notificationRenderer setBounds:self.cachedBounds];
+        [_notificationRenderer render];
     }
-    else
-    {
-        // note that a null surface is a valid situation: it is possible that a game document has been opened but the underlying game emulation
-        // hasn't started yet
-        NSLog(@"Surface is null");
-    }
+
+    CGLUnlockContext(cgl_ctx);
+    [[self openGLContext] flushBuffer];
 }
 
+#ifdef CG_SUPPORT
 - (void)OE_renderToTexture:(GLuint)renderTarget usingTextureCoords:(const GLint *)texCoords inCGLContext:(CGLContextObj)cgl_ctx
 {
     const GLfloat vertices[] =
@@ -570,7 +726,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     glDisableClientState(GL_VERTEX_ARRAY);
 
     glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
-    glViewport(0, 0, self.frame.size.width, self.frame.size.height);
+    [self updateViewport];
 }
 
 - (void)OE_applyCgShader:(OECGShader *)shader usingVertices:(const GLfloat *)vertices withTextureSize:(const OEIntSize)textureSize withOutputSize:(const OEIntSize)outputSize inPassNumber:(const NSUInteger)passNumber inCGLContext:(CGLContextObj)cgl_ctx
@@ -640,6 +796,13 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
         cgGLSetParameter2f([shader fragmentPassTextureSizes][i], _multipassSizes[i+1].width, _multipassSizes[i+1].height);
     }
 
+    // bind LUT textures
+    for(NSUInteger i = 0; i < [[shader lutTextures] count]; ++i)
+    {
+        cgGLSetTextureParameter([shader fragmentLUTTextures][i], _lutTextures[i]);
+        cgGLEnableTextureParameter([shader fragmentLUTTextures][i]);
+    }
+
     cgGLEnableProfile([shader fragmentProfile]);
 
     glEnableClientState( GL_TEXTURE_COORD_ARRAY );
@@ -674,6 +837,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     // multipassSize[0] contains the initial texture size
     _multipassSizes[0] = OEIntSizeMake(width, height);
 
+    const NSSize frameSize = self.cachedFrameSize;
     for(NSUInteger i = 0; i < numberOfPasses; ++i)
     {
         OEScaleType xScaleType = [shaders[i] xScaleType];
@@ -681,14 +845,14 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
         CGSize      scaler     = [shaders[i] scaler];
 
         if(xScaleType == OEScaleTypeViewPort)
-            width = self.frame.size.width * scaler.width;
+            width = frameSize.width * scaler.width;
         else if(xScaleType == OEScaleTypeAbsolute)
             width = scaler.width;
         else
             width = width * scaler.width;
 
         if(yScaleType == OEScaleTypeViewPort)
-            height = self.frame.size.height * scaler.height;
+            height = frameSize.height * scaler.height;
         else if(yScaleType == OEScaleTypeAbsolute)
             height = scaler.height;
         else
@@ -768,7 +932,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
     // render to screen
     glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
-    glViewport(0, 0, self.frame.size.width, self.frame.size.height);
+    [self updateViewport];
     glBindTexture(GL_TEXTURE_RECTANGLE_EXT, 0);
     glDisable(GL_TEXTURE_RECTANGLE_EXT);
     glEnable(GL_TEXTURE_2D);
@@ -793,6 +957,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     glDisableClientState( GL_TEXTURE_COORD_ARRAY );
     glDisableClientState(GL_VERTEX_ARRAY);
 }
+#endif
 
 // GL render method
 - (void)OE_drawSurface:(IOSurfaceRef)surfaceRef inCGLContext:(CGLContextObj)cgl_ctx usingShader:(OEGameShader *)shader
@@ -821,14 +986,10 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     glClientActiveTexture(GL_TEXTURE0);
     glColor4f(1.0, 1.0, 1.0, 1.0);
 
-    // calculate aspect ratio
-    NSSize scaled;
-    OEIntSize aspectSize = _gameAspectSize;
-    float wr = aspectSize.width / self.frame.size.width;
-    float hr = aspectSize.height / self.frame.size.height;
-    float ratio;
-    ratio = (hr < wr ? wr : hr);
-    scaled = NSMakeSize(( wr / ratio), (hr / ratio));
+    // adjust for aspect ratio
+    const NSSize viewFrameSize = self.cachedFrameSize;
+    OEIntSize frameSize = (OEIntSize){viewFrameSize.width, viewFrameSize.height};
+    NSSize scaled = [self correctScreenSize:frameSize forAspectSize:_gameAspectSize returnVertices:YES];
 
     float halfw = scaled.width;
     float halfh = scaled.height;
@@ -861,6 +1022,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     }
     else if([shader isCompiled])
     {
+#ifdef CG_SUPPORT
         if([shader isKindOfClass:[OEMultipassShader class]])
         {
             [self OE_renderToTexture:_rttGameTextures[_frameCount % OEFramesSaved] usingTextureCoords:tex_coords inCGLContext:cgl_ctx];
@@ -873,12 +1035,13 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
             // renders to texture because we need TEXTURE_2D not TEXTURE_RECTANGLE
             [self OE_renderToTexture:_rttGameTextures[_frameCount % OEFramesSaved] usingTextureCoords:tex_coords inCGLContext:cgl_ctx];
 
-            [self OE_applyCgShader:(OECGShader *)shader usingVertices:verts withTextureSize:_gameScreenSize withOutputSize:OEIntSizeMake(self.frame.size.width, self.frame.size.height) inPassNumber:0 inCGLContext:cgl_ctx];
+            [self OE_applyCgShader:(OECGShader *)shader usingVertices:verts withTextureSize:_gameScreenSize withOutputSize:frameSize inPassNumber:0 inCGLContext:cgl_ctx];
             
             ++_frameCount;
         }
         else
         {
+#endif
             glUseProgramObjectARB([(OEGLSLShader *)shader programObject]);
 
             // set up shader uniforms
@@ -894,7 +1057,10 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
             // turn off shader - incase we switch toa QC filter or to a mode that does not use it.
             glUseProgramObjectARB(0);
+
+#ifdef CG_SUPPORT
         }
+#endif
     }
 
     glTexParameteri(GL_TEXTURE_RECTANGLE_EXT, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -913,14 +1079,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     return kCVReturnSuccess;
 }
 
-#pragma mark -
-#pragma mark Filters and Compositions
-
-- (QCComposition *)composition
-{
-    return [[OECompositionPlugin pluginWithName:_filterName] composition];
-}
-
+#pragma mark - Filters
 - (void)setFilterName:(NSString *)value
 {
     if(_filterName != value)
@@ -929,7 +1088,6 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
         _filterName = [value copy];
 
         [self OE_refreshFilterRenderer];
-        [[self delegate] gameView:self setDrawSquarePixels:[self composition] != nil];
     }
 }
 
@@ -940,17 +1098,21 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
     DLog(@"releasing old filterRenderer");
 
-    _filterRenderer = nil;
-
     if(_filterName == nil) return;
 
     OEGameShader *filter = [_filters objectForKey:_filterName];
 
     // Revert to the Default Filter if the current is not available (ie. deleted)
     if(![_filters objectForKey:_filterName])
-        _filterName = [[NSUserDefaults standardUserDefaults] objectForKey:_OEDefaultVideoFilterKey];
+        _filterName = [[NSUserDefaults standardUserDefaults] objectForKey:OEDefaultVideoFilterKey];
+
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
+    CGLLockContext(cgl_ctx);
+    CGLSetCurrentContext(cgl_ctx);
 
     [filter compileShaders];
+
+#ifdef CG_SUPPORT
     if([filter isKindOfClass:[OEMultipassShader class]])
     {
         free(_multipassSizes);
@@ -966,53 +1128,62 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
                 _ntscSetup = snes_ntsc_rgb;
             snes_ntsc_init(_ntscTable, &_ntscSetup);
         }
-    }
 
-    if([_filters objectForKey:_filterName] == nil && [self openGLContext] != nil)
-    {
-        CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
-        CGLLockContext(cgl_ctx);
-
-        DLog(@"making new filter renderer");
-
-        // This will be responsible for our rendering... weee...
-        QCComposition *compo = [self composition];
-
-        if(compo != nil)
-            _filterRenderer = [[QCRenderer alloc] initWithCGLContext:cgl_ctx
-                                                        pixelFormat:CGLGetPixelFormat(cgl_ctx)
-                                                         colorSpace:_rgbColorSpace
-                                                        composition:compo];
-
-        if(_filterRenderer == nil)
-            NSLog(@"Warning: failed to create our filter QCRenderer");
-
-        if(![[_filterRenderer inputKeys] containsObject:@"OEImageInput"])
-            NSLog(@"Warning: invalid Filter composition. Does not contain valid image input key");
-
-        if([[_filterRenderer outputKeys] containsObject:@"OEMousePositionX"] && [[_filterRenderer outputKeys] containsObject:@"OEMousePositionY"])
+        if([self openGLContext] != nil)
         {
-            DLog(@"filter has mouse output position keys");
-            _filterHasOutputMousePositionKeys = YES;
-        }
-        else
-            _filterHasOutputMousePositionKeys = NO;
+            // upload LUT textures
+            for(NSUInteger i = 0; i < [[(OEMultipassShader *)filter lutTextures] count]; ++i)
+            {
+                OELUTTexture *lut = [(OEMultipassShader *)filter lutTextures][i];
+                if(lut == nil) {
+                    NSLog(@"Warning: failed to load LUT texture %s", [[lut name] UTF8String]);
+                    continue;
+                }
 
-        CGLUnlockContext(cgl_ctx);
+                CGImageRef texture = [lut texture];
+                if(texture == nil) {
+                    NSLog(@"Warning: failed to load LUT texture %s", [[lut name] UTF8String]);
+                    continue;
+                }
+
+                CGDataProviderRef provider = CGImageGetDataProvider(texture);
+                CFDataRef data = CGDataProviderCopyData(provider);
+
+                glBindTexture(GL_TEXTURE_2D, _lutTextures[i]);
+
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, [lut wrapType]);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, [lut wrapType]);
+
+                GLint mag_filter = [lut linearFiltering] ? GL_LINEAR : GL_NEAREST;
+                GLint min_filter = [lut linearFiltering] ? ([lut mipmap] ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR) :
+                                                           ([lut mipmap] ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, mag_filter);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
+
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, CGImageGetWidth(texture), CGImageGetHeight(texture), 0, GL_RGBA, GL_UNSIGNED_BYTE, CFDataGetBytePtr(data));
+
+                if([lut mipmap])
+                    glGenerateMipmap(GL_TEXTURE_2D);
+                
+                glBindTexture(GL_TEXTURE_2D, 0);
+                
+                CFRelease(data);
+            }
+        }
     }
+#endif
+
+    CGLUnlockContext(cgl_ctx);
 }
 
 #pragma mark - Screenshots
-
 - (NSImage *)screenshot
 {
     const OEIntSize   aspectSize     = _gameAspectSize;
-    const NSSize      frameSize      = [self frame].size;
-    const float       wr             = frameSize.width / aspectSize.width;
-    const float       hr             = frameSize.height / aspectSize.height;
-    const OEIntSize   textureIntSize = (wr > hr ?
-                                        (OEIntSize){hr * aspectSize.width, frameSize.height      } :
-                                        (OEIntSize){frameSize.width      , wr * aspectSize.height});
+    const CGFloat     scaleFactor    = [[self window] backingScaleFactor];
+    const NSSize      frameSize      = OEScaleSize([self bounds].size, scaleFactor);
+    const OEIntSize   frameIntSize   = (OEIntSize){frameSize.width, frameSize.height};
+    const OEIntSize   textureIntSize = [self OE_correctTextureSize:frameIntSize forAspectSize:aspectSize];
     const NSSize      textureNSSize  = NSSizeFromOEIntSize(textureIntSize);
 
     NSBitmapImageRep *imageRep       = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
@@ -1028,6 +1199,9 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
     CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
     [[self openGLContext] makeCurrentContext];
+
+    _notificationRenderer.disableNotifications = true;
+    [self render];
     CGLLockContext(cgl_ctx);
     {
         glReadPixels((frameSize.width - textureNSSize.width) / 2,
@@ -1036,12 +1210,14 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
                      GL_RGB, GL_UNSIGNED_BYTE, [imageRep bitmapData]);
     }
     CGLUnlockContext(cgl_ctx);
+    _notificationRenderer.disableNotifications = false;
 
     NSImage *screenshotImage = [[NSImage alloc] initWithSize:textureNSSize];
     [screenshotImage addRepresentation:imageRep];
 
     // Flip the image
     [screenshotImage lockFocusFlipped:YES];
+    [[NSGraphicsContext currentContext] setImageInterpolation:NSImageInterpolationNone];
     [imageRep drawInRect:(NSRect){.size = textureNSSize}];
     [screenshotImage unlockFocus];
 
@@ -1084,9 +1260,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
         };
 
         // Convert IOSurface pixel format to NSBitmapImageRep
-        const uint8_t permuteMap[] = {3,2,1,0};
-        vImagePermuteChannels_ARGB8888(&src, &src, permuteMap, 0);
-        vImageConvert_ARGB8888toRGB888(&src, &dest, 0);
+        vImageConvert_BGRA8888toRGB888(&src, &dest, 0);
     }
     IOSurfaceUnlock(_gameSurfaceRef, kIOSurfaceLockReadOnly, NULL);
 
@@ -1095,13 +1269,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
     if(!disableAspectRatioCorrection)
     {
-        // calculate aspect ratio
-        OEIntSize aspectSize = _gameAspectSize;
-        float     wr         = imageSize.width  / aspectSize.width;
-        float     hr         = imageSize.height / aspectSize.height;
-
-        if(wr > hr) imageSize.height = imageSize.width  * aspectSize.height / aspectSize.width;
-        else        imageSize.width  = imageSize.height * aspectSize.width  / aspectSize.height;
+        imageSize = [self correctScreenSize:_gameScreenSize forAspectSize:_gameAspectSize returnVertices:NO];
     }
     
     NSImage *screenshotImage = [[NSImage alloc] initWithSize:imageSize];
@@ -1109,6 +1277,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
     // Flip the image
     [screenshotImage lockFocusFlipped:YES];
+    [[NSGraphicsContext currentContext] setImageInterpolation:NSImageInterpolationNone];
     [imageRep drawInRect:(NSRect){.size = imageSize}];
     [screenshotImage unlockFocus];
 
@@ -1118,34 +1287,32 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 #pragma mark -
 #pragma mark Game Core
 
-- (void)setDelegate:(id<OEGameViewDelegate>)value
-{
-    if(_delegate != value)
-    {
-        _delegate = value;
-        [_delegate gameView:self setDrawSquarePixels:[self composition] != nil];
-    }
-}
-
 - (void)setScreenSize:(OEIntSize)newScreenSize aspectSize:(OEIntSize)newAspectSize withIOSurfaceID:(IOSurfaceID)newSurfaceID
 {
-    _gameAspectSize = newAspectSize;
+    [self setAspectSize:newAspectSize];
     [self setScreenSize:newScreenSize withIOSurfaceID:newSurfaceID];
 }
 
 - (void)setScreenSize:(OEIntSize)newScreenSize withIOSurfaceID:(IOSurfaceID)newSurfaceID;
 {
-    DLog(@"Set screensize to: %@", NSStringFromOEIntSize(newScreenSize));
+    BOOL surfaceChanged = _gameSurfaceID != newSurfaceID;
+    BOOL screenRectChanged = _gameScreenSize.width != newScreenSize.width || _gameScreenSize.height != newScreenSize.height;
+
+    if (!surfaceChanged && !screenRectChanged) return;
+    DLog(@"Set screensize to: %@ surfaceId:%d", NSStringFromOEIntSize(newScreenSize), newSurfaceID);
+
     // Recache the new resized surfaceID, so we can get our surfaceRef from it, to draw.
     _gameSurfaceID = newSurfaceID;
     _gameScreenSize = newScreenSize;
 
-    [self rebindIOSurface];
-
     CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
     [[self openGLContext] makeCurrentContext];
+    
+    if (surfaceChanged) [self rebindIOSurface];
+
     CGLLockContext(cgl_ctx);
     {
+#ifdef CG_SUPPORT
         if(_rttGameTextures)
         {
             for(NSUInteger i = 0; i < OEFramesSaved; ++i)
@@ -1155,6 +1322,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
                 glBindTexture(GL_TEXTURE_2D, 0);
             }
         }
+#endif
         free(_ntscSource);
         _ntscSource      = (uint16_t *) malloc(sizeof(uint16_t) * newScreenSize.width * newScreenSize.height);
         if(newScreenSize.width <= 256)
@@ -1173,7 +1341,30 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 
 - (void)setAspectSize:(OEIntSize)newAspectSize
 {
+    DLog(@"Set aspectsize to: %@", NSStringFromOEIntSize(newAspectSize));
     _gameAspectSize = newAspectSize;
+    [_notificationRenderer setAspectSize:_gameAspectSize];
+}
+
+- (NSSize)correctScreenSize:(OEIntSize)screenSize forAspectSize:(OEIntSize)aspectSize returnVertices:(BOOL)flag
+{
+    // calculate aspect ratio
+    CGFloat wr = (CGFloat) aspectSize.width / screenSize.width;
+    CGFloat hr = (CGFloat) aspectSize.height / screenSize.height;
+    CGFloat ratio = MAX(hr, wr);
+    NSSize scaled = NSMakeSize((wr / ratio), (hr / ratio));
+
+    CGFloat halfw = scaled.width;
+    CGFloat halfh = scaled.height;
+
+    NSSize corrected;
+
+    if(flag)
+        corrected = NSMakeSize(halfw, halfh);
+    else
+        corrected = NSMakeSize(screenSize.width / halfh, screenSize.height / halfw);
+
+    return corrected;
 }
 
 #pragma mark - Responder
@@ -1193,13 +1384,6 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     }
 
     return [super acceptsFirstMouse:theEvent];
-}
-
-- (void)viewDidMoveToWindow
-{
-    [super viewDidMoveToWindow];
-
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"OEGameViewDidMoveToWindow" object:self];
 }
 
 #pragma mark - Keyboard Events
@@ -1229,7 +1413,7 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
     CGPoint location = [anEvent locationInWindow];
     location = [self convertPoint:location fromView:nil];
     location.y = frame.size.height - location.y;
-    OEIntSize screenSize = _gameScreenSize;
+    NSSize screenSize = [self correctScreenSize:_gameScreenSize forAspectSize:_gameAspectSize returnVertices:NO];
 
     CGRect screenRect = { .size.width = screenSize.width, .size.height = screenSize.height };
 
@@ -1315,6 +1499,32 @@ static NSString *const _OEDefaultVideoFilterKey = @"videoFilter";
 - (void)mouseExited:(NSEvent *)theEvent;
 {
     [[self delegate] gameView:self didReceiveMouseEvent:[self OE_mouseEventWithEvent:theEvent]];
+}
+#pragma mark - Private Helpers
+- (void)viewDidChangeBackingProperties
+{
+    [super viewDidChangeBackingProperties];
+    self.cachedBoundsOnWindow = [self convertRectToBacking:self.bounds];
+
+    CGLContextObj cgl_ctx = [[self openGLContext] CGLContextObj];
+    CGLLockContext(cgl_ctx);
+    CGLSetCurrentContext(cgl_ctx);
+    [_notificationRenderer cleanUp];
+    [_notificationRenderer setScaleFactor:[[self window] backingScaleFactor]];
+    [_notificationRenderer setupInContext:[self openGLContext]];
+    CGLUnlockContext(cgl_ctx);
+}
+
+- (OEIntSize)OE_correctTextureSize:(OEIntSize)textureSize forAspectSize:(OEIntSize)aspectSize
+{
+    // calculate aspect ratio
+    float     wr             = (CGFloat) textureSize.width / aspectSize.width;
+    float     hr             = (CGFloat) textureSize.height / aspectSize.height;
+    OEIntSize textureIntSize = (wr > hr ?
+                                (OEIntSize){hr * aspectSize.width, textureSize.height      } :
+                                (OEIntSize){textureSize.width    , wr * aspectSize.height  });
+
+    return textureIntSize;
 }
 
 @end

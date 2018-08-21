@@ -24,15 +24,16 @@
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
 #import "OEToolTip.h"
 
 @interface NSToolTipManager : NSObject
-+ (id)sharedToolTipManager;
+@property(class, readonly) NSToolTipManager *sharedToolTipManager;
 @end
 
 @interface OEToolTipManager : NSToolTipManager
-+ (id)sharedToolTipManager;
+
+@property(class, readonly) OEToolTipManager *sharedToolTipManager;
 
 - (NSColor*)toolTipBackgroundColorForCurrentStyle;
 - (NSColor*)toolTipTextColorForCurrentStyle;

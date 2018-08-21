@@ -24,10 +24,11 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#import <Cocoa/Cocoa.h>
-#import "OESystemPlugin.h"
+@import Cocoa;
 #import "OEBlankSlateBackgroundView.h"
 @class OEBlankSlateView;
+
+extern NSString * const OECDBasedGamesUserGuideURLString;
 
 @protocol OEBlankSlateViewDelegate <NSObject>
 @optional
@@ -37,11 +38,16 @@
 @end
 
 @interface OEBlankSlateView : OEBlankSlateBackgroundView
-
-@property (nonatomic) NSString* representedCollectionName;
-@property (nonatomic) OESystemPlugin* representedSystemPlugin;
-
+@property (nonatomic) id representedObject;
 @property (assign) id <OEBlankSlateViewDelegate> delegate;
+@property (readonly, strong) NSView *containerView;
 
 - (void)gotoProjectURL:(id)sender;
+- (void)setupViewForRepresentedObject;
+@end
+
+@interface OEBlankSlateView (SetupMethods)
+- (void)addLeftHeadlineWithText:(NSString*)text;
+- (void)addInformationalText:(NSString*)text;
+- (void)setupBoxWithText:(NSString*)text andImageView:(NSView*)arrowImageView;
 @end

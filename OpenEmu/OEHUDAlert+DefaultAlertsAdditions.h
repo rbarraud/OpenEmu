@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2012, OpenEmu Team
+ Copyright (c) 2017, OpenEmu Team
  
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -27,29 +27,46 @@
 
 #import "OEHUDAlert.h"
 
+NS_ASSUME_NONNULL_BEGIN
+
 extern NSString *const OEMaxSaveGameNameLengthKey;
 
 extern NSString *const OERemoveGameFromCollectionAlertSuppressionKey;
 extern NSString *const OELoadAutoSaveAlertSuppressionKey;
-extern NSString *const OESaveGameWhenQuitAlertSuppressionKey;
 extern NSString *const OEDeleteGameAlertSuppressionKey;
 extern NSString *const OESaveGameAlertSuppressionKey;
 extern NSString *const OEChangeCoreAlertSuppressionKey;
 extern NSString *const OEResetSystemAlertSuppressionKey;
 extern NSString *const OEStopEmulationAlertSuppressionKey;
+extern NSString *const OEDeleteSaveStateAlertSuppressionKey;
+extern NSString *const OEDeleteScreenshotAlertSuppressionKey;
 extern NSString *const OERemoveGameFilesFromLibraryAlertSuppressionKey;
+extern NSString *const OERenameSpecialSaveStateAlertSuppressionKey;
+extern NSString *const OEGameCoreGlitchesSuppressionKey;
+extern NSString *const OEDownloadRomWarningSupperssionKey;
 
 @interface OEHUDAlert (DefaultAlertsAdditions)
 
-+ (id)quitApplicationAlert;
-+ (id)saveGameAlertWithProposedName:(NSString *)name;
-+ (id)saveAutoSaveGameAlert;
-+ (id)loadAutoSaveGameAlert;
-+ (id)deleteStateAlertWithStateName:(NSString *)stateName;
-+ (id)resetSystemAlert;
-+ (id)stopEmulationAlert;
++ (OEHUDAlert *)quitApplicationAlert;
++ (OEHUDAlert *)saveGameAlertWithProposedName:(NSString *)name;
++ (OEHUDAlert *)loadAutoSaveGameAlert;
++ (OEHUDAlert *)deleteStateAlertWithStateName:(NSString *)stateName;
++ (OEHUDAlert *)deleteStateAlertWithStateCount:(NSUInteger)count;
++ (OEHUDAlert *)resetSystemAlert;
++ (OEHUDAlert *)stopEmulationAlert;
 
-+ (id)removeGamesFromCollectionAlert;
-+ (id)removeGamesFromLibraryAlert:(BOOL)multipleGames;
-+ (id)removeGameFilesFromLibraryAlert:(BOOL)multipleGames;
++ (OEHUDAlert *)deleteScreenshotAlertWithScreenshotName:(NSString*)screenshotName;
++ (OEHUDAlert *)deleteScreenshotAlertWithScreenshotCount:(NSUInteger)count;
+
++ (OEHUDAlert *)removeGamesFromCollectionAlert;
++ (OEHUDAlert *)removeGamesFromLibraryAlert:(BOOL)multipleGames;
++ (OEHUDAlert *)removeGameFilesFromLibraryAlert:(BOOL)multipleGames;
++ (OEHUDAlert *)renameSpecialStateAlert;
+
++ (OEHUDAlert *)romDownloadRequiredAlert:(NSString*)name server:(NSString*)server;
+
++ (OEHUDAlert *)missingBIOSFilesAlert:(NSString*)missingFilesList;
+
 @end
+
+NS_ASSUME_NONNULL_END

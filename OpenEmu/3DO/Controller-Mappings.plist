@@ -19,9 +19,9 @@
 		<key>OE3DOButtonC</key>
 		<string>OEControllerMicrosoftXbox360ButtonB</string>
 		<key>OE3DOButtonL</key>
-		<string>OEControllerMicrosoftXbox360ButtonLeftTrigger</string>
+		<string>OEControllerMicrosoftXbox360ButtonLeftShoulder</string>
 		<key>OE3DOButtonR</key>
-		<string>OEControllerMicrosoftXbox360ButtonRightTrigger</string>
+		<string>OEControllerMicrosoftXbox360ButtonRightShoulder</string>
 		<key>OE3DOButtonP</key>
 		<string>OEControllerMicrosoftXbox360ButtonStart</string>
 		<key>OE3DOButtonX</key>
@@ -44,9 +44,9 @@
 		<key>OE3DOButtonC</key>
 		<string>OEControllerSonyPS3SixaxisButtonCircle</string>
 		<key>OE3DOButtonL</key>
-		<string>OEControllerSonyPS3SixaxisButtonL2</string>
+		<string>OEControllerSonyPS3SixaxisButtonL1</string>
 		<key>OE3DOButtonR</key>
-		<string>OEControllerSonyPS3SixaxisButtonR2</string>
+		<string>OEControllerSonyPS3SixaxisButtonR1</string>
 		<key>OE3DOButtonP</key>
 		<string>OEControllerSonyPS3SixaxisButtonStart</string>
 		<key>OE3DOButtonX</key>
@@ -63,9 +63,9 @@
 		<key>OE3DOButtonC</key>
 		<string>OEControllerLogitechDualActionButton3</string>
 		<key>OE3DOButtonL</key>
-		<string>OEControllerLogitechDualActionButtonLeftTrigger</string>
+		<string>OEControllerLogitechDualActionButtonLeftShoulder</string>
 		<key>OE3DOButtonR</key>
-		<string>OEControllerLogitechDualActionButtonRightTrigger</string>
+		<string>OEControllerLogitechDualActionButtonRightShoulder</string>
 		<key>OE3DOButtonP</key>
 		<string>OEControllerLogitechDualActionButtonStart</string>
 		<key>OE3DOButtonX</key>
@@ -105,9 +105,9 @@
 		<key>OE3DOButtonC</key>
 		<string>OEControllerGravisGamePadProButton3</string>
 		<key>OE3DOButtonL</key>
-		<string>OEControllerGravisGamePadProButtonLeftTrigger</string>
+		<string>OEControllerGravisGamePadProButtonLeftShoulder</string>
 		<key>OE3DOButtonR</key>
-		<string>OEControllerGravisGamePadProButtonRightTrigger</string>
+		<string>OEControllerGravisGamePadProButtonRightShoulder</string>
 		<key>OE3DOButtonP</key>
 		<string>OEControllerGravisGamePadProButtonStart</string>
 		<key>OE3DOButtonX</key>
@@ -296,13 +296,57 @@
 		<key>OE3DOButtonC</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonCircle</string>
 		<key>OE3DOButtonL</key>
-		<string>OEControllerSonyPS4Dualshock4ButtonL2</string>
+		<string>OEControllerSonyPS4Dualshock4ButtonL1</string>
 		<key>OE3DOButtonR</key>
-		<string>OEControllerSonyPS4Dualshock4ButtonR2</string>
+		<string>OEControllerSonyPS4Dualshock4ButtonR1</string>
 		<key>OE3DOButtonP</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonOptions</string>
 		<key>OE3DOButtonX</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonShare</string>
+	</dict>
+	<key>OEControllerGCExtendedGamepadProfile</key>
+	<dict>
+		<key>OE3DOButtonUp</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadUp</string>
+		<key>OE3DOButtonDown</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadDown</string>
+		<key>OE3DOButtonLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadLeft</string>
+		<key>OE3DOButtonRight</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadRight</string>
+		<key>OE3DOButtonA</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonX</string>
+		<key>OE3DOButtonB</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonA</string>
+		<key>OE3DOButtonC</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonB</string>
+		<key>OE3DOButtonL</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL1</string>
+		<key>OE3DOButtonR</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonR1</string>
+		<key>OE3DOButtonP</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonHome</string>
+		<key>OE3DOButtonX</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL2</string>
+	</dict>
+	<key>OEControllerNintendoSwitchProController</key>
+	<dict>
+		<key>OE3DOButtonUp</key>
+		<string>OEControllerNintendoSwitchProControllerDPadUp</string>
+		<key>OE3DOButtonA</key>
+		<string>OEControllerNintendoSwitchProControllerButtonY</string>
+		<key>OE3DOButtonB</key>
+		<string>OEControllerNintendoSwitchProControllerButtonB</string>
+		<key>OE3DOButtonC</key>
+		<string>OEControllerNintendoSwitchProControllerButtonA</string>
+		<key>OE3DOButtonL</key>
+		<string>OEControllerNintendoSwitchProControllerButtonL</string>
+		<key>OE3DOButtonR</key>
+		<string>OEControllerNintendoSwitchProControllerButtonR</string>
+		<key>OE3DOButtonP</key>
+		<string>OEControllerNintendoSwitchProControllerButtonPlus</string>
+		<key>OE3DOButtonX</key>
+		<string>OEControllerNintendoSwitchProControllerButtonMinus</string>
 	</dict>
 </dict>
 </plist>

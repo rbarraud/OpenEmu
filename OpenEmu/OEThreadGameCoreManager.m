@@ -26,9 +26,10 @@
 
 #import "OEThreadGameCoreManager.h"
 #import "OEThreadProxy.h"
-#import "OpenEmuHelperApp.h"
-#import "OEGameCoreManager_Internal.h"
 #import "OECorePlugin.h"
+#import "OEGameCoreManager_Internal.h"
+#import "OESystemPlugin.h"
+#import "OpenEmuHelperApp.h"
 
 @implementation OEThreadGameCoreManager
 {
@@ -38,16 +39,14 @@
     OEThreadProxy    *_helperProxy;
     OpenEmuHelperApp *_helper;
 
-    OEThreadProxy    *_displayHelperProxy;
-    OEThreadProxy    *_systemClientProxy;
-    id                _systemClient;
+    OEThreadProxy    *_gameCoreOwnerProxy;
 
-    void(^_completionHandler)(id systemClient);
+    void(^_completionHandler)(void);
     void(^_errorHandler)(NSError *error);
     void(^_stopHandler)(void);
 }
 
-- (void)loadROMWithCompletionHandler:(void(^)(id systemClient))completionHandler errorHandler:(void(^)(NSError *))errorHandler;
+- (void)loadROMWithCompletionHandler:(void(^)(void))completionHandler errorHandler:(void(^)(NSError *))errorHandler;
 {
     _completionHandler = [completionHandler copy];
     _errorHandler = [errorHandler copy];
@@ -57,7 +56,7 @@
     _helper = [[OpenEmuHelperApp alloc] init];
     _helperProxy = [OEThreadProxy threadProxyWithTarget:_helper thread:_helperThread];
 
-    _displayHelperProxy = [OEThreadProxy threadProxyWithTarget:[self displayHelper] thread:[NSThread mainThread]];
+    _gameCoreOwnerProxy = [OEThreadProxy threadProxyWithTarget:[self gameCoreOwner] thread:[NSThread mainThread]];
 
     [_helperThread start];
 }
@@ -71,11 +70,14 @@
 {
     @autoreleasepool
     {
+        [[NSThread currentThread] setName:@"org.openemu.core-manager-thread"];
+        [[NSThread currentThread] setQualityOfService:NSQualityOfServiceUserInitiated];
+
         [self setGameCoreHelper:(id<OEGameCoreHelper>)_helperProxy];
-        [_helper setDisplayHelper:(id<OEGameCoreDisplayHelper>)_displayHelperProxy];
+        [_helper setGameCoreOwner:(id<OEGameCoreOwner>)_gameCoreOwnerProxy];
 
         NSError *error;
-        if(![_helper loadROMAtPath:[self ROMPath] withCorePluginAtPath:[[self plugin] path] systemIdentifier:[[self systemController] systemIdentifier] error:&error])
+        if(![_helper loadROMAtPath:[self ROMPath] romCRC32:[self ROMCRC32] romMD5:[self ROMMD5] romHeader:[self ROMHeader] romSerial:[self ROMSerial] systemRegion:[self systemRegion] withCorePluginAtPath:[[self plugin] path] systemPluginPath:[[self systemPlugin] path] error:&error])
         {
             FIXME("Return a proper error object here.");
             if(_errorHandler != nil)
@@ -86,27 +88,19 @@
             return;
         }
 
-        _systemClient = [_helper gameCore];
-        _systemClientProxy = [OEThreadProxy threadProxyWithTarget:_systemClient thread:_helperThread];
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if(_completionHandler != nil)
-            {
-                _completionHandler(_systemClientProxy);
-                _completionHandler = nil;
-            }
-        });
+        if (_completionHandler) {
+            dispatch_async(dispatch_get_main_queue(), _completionHandler);
+            _completionHandler = nil;
+        }
 
         _dummyTimer = [NSTimer scheduledTimerWithTimeInterval:1e9 target:self selector:@selector(dummyTimer:) userInfo:nil repeats:YES];
 
         CFRunLoopRun();
 
-        if(_stopHandler != nil)
+        if(_stopHandler)
         {
-            void(^stopHandler)(void) = _stopHandler;
+            dispatch_async(dispatch_get_main_queue(), _stopHandler);
             _stopHandler = nil;
-
-            dispatch_async(dispatch_get_main_queue(), stopHandler);
         }
     }
 }
@@ -123,9 +117,7 @@
     _helperThread       = nil;
     _helperProxy        = nil;
     _helper             = nil;
-    _displayHelperProxy = nil;
-    _systemClientProxy  = nil;
-    _systemClient       = nil;
+    _gameCoreOwnerProxy = nil;
     _completionHandler  = nil;
     _errorHandler       = nil;
 }

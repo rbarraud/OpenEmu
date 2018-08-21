@@ -25,8 +25,10 @@
  */
 
 #import "OETextFieldCell.h"
-
 #import "OEControl.h"
+#import "OETheme.h"
+#import "OEThemeTextAttributes.h"
+#import "OEThemeImage.h"
 
 @interface OETextFieldCell ()
 {
@@ -37,16 +39,6 @@
 @end
 
 @implementation OETextFieldCell
-
-- (id)initImageCell:(NSImage *)image
-{
-    self = [super initImageCell:image];
-    if(self)
-    {
-        [self OE_commonInit];
-    }
-    return self;
-}
 
 - (id)initTextCell:(NSString *)aString
 {

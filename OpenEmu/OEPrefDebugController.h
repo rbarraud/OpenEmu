@@ -25,28 +25,9 @@
  */
 
 
-#import <Foundation/Foundation.h>
+@import Foundation;
 #import "OEPreferencePane.h"
 
 @interface OEPrefDebugController : NSViewController <OEPreferencePane>
 @property (assign) IBOutlet NSTableView *tableView;
-/*
-@property(readonly) BOOL canUseXPCMode;
-@property IBOutlet NSPopUpButton *gameModePopUpButton;
-- (IBAction)changeGameMode:(id)sender;
-
-#pragma mark -
-#pragma mark UI Methods
-- (IBAction)changeRegion:(id)sender;
-- (IBAction)executeDatabaseAction:(id)sender;
-
-- (IBAction)chooseSaveStateFolder:(id)sender;
-- (IBAction)defaultSaveStateFolder:(id)sender;
-- (IBAction)findUntrackedSaveStates:(id)sender;
-
-- (IBAction)changeGameViewBackgroundColor:(id)sender;
-
-- (IBAction)gameInfoUpdate:(id)sender;
-- (IBAction)gameInfoCancel:(id)sender;
- */
 @end

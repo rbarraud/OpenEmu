@@ -26,7 +26,6 @@
 
 #import "OEPrefGameplayController.h"
 #import "OEPlugin.h"
-#import "OECompositionPlugin.h"
 #import "OEShaderPlugin.h"
 #import "OEGameViewController.h"
 #import "OEDBSystem.h"
@@ -40,7 +39,6 @@
     // Setup plugins menu
     NSMutableSet   *filterSet     = [NSMutableSet set];
     NSMutableArray *filterPlugins = [NSMutableArray array];
-    [filterSet addObjectsFromArray:[OECompositionPlugin allPluginNames]];
     [filterSet addObjectsFromArray:[OEShaderPlugin allPluginNames]];
     [filterSet filterUsingPredicate:[NSPredicate predicateWithFormat:@"NOT SELF beginswith '_'"]];
     [filterPlugins addObjectsFromArray:[filterSet allObjects]];
@@ -90,12 +88,12 @@
 
 - (NSString *)localizedTitle
 {
-    return NSLocalizedString([self title], "");
+    return NSLocalizedString([self title], @"Preferences: Gamplay Toolbar Item");
 }
 
 - (NSSize)viewSize
 {
-	return NSMakeSize(423, 254);
+	return NSMakeSize(423, 282);
 }
 
 #pragma mark -

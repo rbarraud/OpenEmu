@@ -36,6 +36,8 @@
 
 @dynamic controller;
 
+static NSArray *_cachedRequiredFiles = nil;
+
 + (OECorePlugin *)corePluginWithBundleAtPath:(NSString *)bundlePath
 {
     return [self pluginWithFileAtPath:bundlePath type:self];
@@ -63,12 +65,29 @@
     return validCores;
 }
 
++ (NSArray *)requiredFiles;
+{
+    if(_cachedRequiredFiles == nil)
+    {
+        NSMutableArray *files = [[NSMutableArray alloc] init];
+        for(OECorePlugin *plugin in [OEPlugin pluginsForType:self])
+            if([plugin requiredFiles] != nil) [files addObjectsFromArray:[plugin requiredFiles]];
+        
+        _cachedRequiredFiles = [files copy];
+    }
+    
+    return _cachedRequiredFiles;
+}
+
 - (id)initWithFileAtPath:(NSString *)aPath name:(NSString *)aName
 {
     if((self = [super initWithFileAtPath:aPath name:aName]))
     {
         NSString *iconPath = [[self bundle] pathForResource:[[self infoDictionary] objectForKey:@"CFIconName"] ofType:@"icns"];
         _icon = [[NSImage alloc] initWithContentsOfFile:iconPath];
+
+        // invalidate global cache
+        _cachedRequiredFiles = nil;
     }
 
     return self;
@@ -90,6 +109,28 @@
 - (NSArray *)systemIdentifiers;
 {
     return [[self infoDictionary] objectForKey:@"OESystemIdentifiers"];
+}
+
+- (NSDictionary *)coreOptions
+{
+    return [[self infoDictionary] objectForKey:OEGameCoreOptionsKey];
+}
+
+- (NSArray *)requiredFiles
+{
+    id options = [self coreOptions];
+    NSMutableArray *allRequiredFiles = [NSMutableArray array];
+    
+    for (id key in options) {
+        id resultDict = [options objectForKey:key];
+        if([resultDict objectForKey:@"OERequiredFiles"] != nil)
+            [allRequiredFiles addObjectsFromArray:[resultDict objectForKey:@"OERequiredFiles"]];
+    }
+    
+    if([allRequiredFiles count] > 0)
+       return [allRequiredFiles copy];
+    else
+        return nil;
 }
 
 - (Class)gameCoreClass

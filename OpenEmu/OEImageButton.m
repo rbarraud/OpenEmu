@@ -25,7 +25,6 @@
  */
 
 #import "OEImageButton.h"
-#import "NSImage+OEDrawingAdditions.h"
 
 @implementation OEImageButton
 @synthesize isInHover;
@@ -62,12 +61,6 @@
 - (void)windowChanged:(id)sender
 {
     [self setNeedsDisplay:YES];
-}
-
-- (void)dealloc 
-{
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
-    
 }
 
 - (void)mouseEntered:(NSEvent *)theEvent
@@ -152,7 +145,7 @@
     NSRect sourceRect = [self imageRectForButtonState:buttonState];
     NSRect targetRect = cellFrame;
     
-    [[self image] drawInRect:targetRect fromRect:sourceRect operation:NSCompositeSourceOver fraction:1.0 respectFlipped:YES hints:nil leftBorder:0 rightBorder:0 topBorder:0 bottomBorder:0];
+    [[self image] drawInRect:targetRect fromRect:sourceRect operation:NSCompositeSourceOver fraction:1.0 respectFlipped:YES hints:nil];
 }
 
 - (NSRect)imageRectForButtonState:(OEButtonState)state

@@ -28,16 +28,20 @@
 #import "OEMSXSystemResponder.h"
 #import "OEMSXSystemResponderClient.h"
 
+#import <OpenEmuSystem/OpenEmuSystem.h>
+
 @implementation OEMSXSystemController
 
-- (NSUInteger)numberOfPlayers
+- (OEFileSupport)canHandleFile:(__kindof OEFile *)file
 {
-    return 2;
-}
+    NSData *dataBuffer = [file readDataInRange:NSMakeRange(0, 2)];
 
-- (Class)responderClass
-{
-    return [OEMSXSystemResponder class];
+    // MSX cart header starts at 0x0 with 41 42
+    uint8_t bytes[] = { 0x41, 0x42 };
+    if([dataBuffer isEqualToData:[[NSData alloc] initWithBytes:bytes length:sizeof(bytes)]])
+        return OEFileSupportYes;
+
+    return OEFileSupportUncertain;
 }
 
 @end

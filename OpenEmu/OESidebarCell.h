@@ -23,15 +23,13 @@
  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#import <Foundation/Foundation.h>
+@import Foundation;
+#import "OECell.h"
 
+@interface OESidebarCell : NSTextFieldCell <OECell>
 
-@interface OESidebarCell : NSTextFieldCell 
-{
-@private
-	BOOL isGroup, isEditing;
-}
 @property (readwrite) BOOL isGroup;
 @property (readwrite) BOOL isEditing;
-@property (strong) NSImage* image;
+@property (strong) NSImage  *image;
+@property (strong) NSString *badge;
 @end

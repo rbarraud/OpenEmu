@@ -24,42 +24,78 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
+
 #import "OEGridView.h"
-#import "IKImageFlowView.h"
 #import "OEBlankSlateView.h"
 
-#import "OECollectionViewItemProtocol.h"
 #import "OELibrarySubviewController.h"
+#import "OECollectionViewItemProtocol.h"
 
+@class OETableView;
 @class OELibraryController;
-@class OEHorizontalSplitView;
 @class OEArrayController;
-@interface OECollectionViewController : NSViewController <OEBlankSlateViewDelegate, NSTableViewDelegate, NSTableViewDataSource, OELibrarySubviewController>
+
+typedef NS_ENUM(NSInteger, OECollectionViewControllerViewTag) {
+    OEBlankSlateTag = -1,
+    OEGridViewTag   = 0,
+    OEListViewTag   = 2
+};
+
+extern NSString * const OELastGridSizeKey;
+extern NSString * const OELastCollectionViewKey;
+
+@interface OECollectionViewController : NSViewController <OEBlankSlateViewDelegate, NSTableViewDelegate, NSTableViewDataSource, OELibrarySubviewController, OEGridViewDelegate, OEGridViewMenuSource, QLPreviewPanelDelegate, QLPreviewPanelDataSource>
+
+/// If YES, the collection view controller is selected and visible to the user. Must be overridden by subclasses.
+@property (nonatomic, readonly) BOOL isSelected;
+
+- (void)reloadData;
+- (void)setNeedsReload;
+- (void)setNeedsReloadVisible;
+- (void)reloadDataIndexes:(NSIndexSet *)indexSet;
+- (void)fetchItems;
+- (NSArray*)defaultSortDescriptors;
+- (void)setSortDescriptors:(NSArray*)descriptors;
+
+- (void)updateBlankSlate;
+- (BOOL)shouldShowBlankSlate;
 
 #pragma mark -
 - (NSArray *)selectedGames;
-- (NSIndexSet *)selectedIndexes;
+@property (nonatomic) NSIndexSet *selectionIndexes;
 
-#pragma mark -
-#pragma mark View Selection
+#pragma mark - Toolbar
 - (IBAction)switchToGridView:(id)sender;
-- (IBAction)switchToFlowView:(id)sender;
 - (IBAction)switchToListView:(id)sender;
-
-#pragma mark -
-#pragma mark Toolbar Actions
 - (IBAction)search:(id)sender;
 - (IBAction)changeGridSize:(id)sender;
 
-#pragma mark -
-#pragma mark Context Menu Actions
-- (IBAction)showSelectedGamesInFinder:(id)sender;
+- (IBAction)deleteSelectedItems:(id)sender;
+
+#pragma mark - Context Menu
+- (NSMenu*)menuForItemsAtIndexes:(NSIndexSet*)indexes;
+
+#pragma mark - Quick Look
+- (void)refreshPreviewPanelIfNeeded;
+/* subclass these to implement quicklook for a specific collection */
+- (BOOL)acceptsPreviewPanelControl:(QLPreviewPanel *)panel;
+- (NSInteger)numberOfPreviewItemsInPreviewPanel:(QLPreviewPanel *)panel;
+- (id <QLPreviewItem>)previewPanel:(QLPreviewPanel *)panel previewItemAtIndex:(NSInteger)index;
+- (NSInteger)imageBrowserViewIndexForPreviewItem:(id <QLPreviewItem>)item;
 
 #pragma mark -
 - (id <OECollectionViewItemProtocol>)representedObject;
-#pragma mark -
-@property(unsafe_unretained) IBOutlet OELibraryController *libraryController;
-@property(readonly) OEArrayController *gamesController;
+
+@property(nonatomic, readonly) OECollectionViewControllerViewTag selectedViewTag;
+@property(nonatomic, weak) IBOutlet OELibraryController *libraryController;
+@end
+
+@interface OECollectionViewController ()
+@property (assign) IBOutlet OETableView     *listView;
+@property (assign) IBOutlet OEGridView      *gridView;
+- (void)OE_switchToView:(OECollectionViewControllerViewTag)tag;
+- (void)OE_showView:(OECollectionViewControllerViewTag)tag;
+- (void)OE_setupToolbarStatesForViewTag:(OECollectionViewControllerViewTag)tag;
 
 @end

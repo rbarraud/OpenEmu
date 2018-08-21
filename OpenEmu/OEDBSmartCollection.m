@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2011, OpenEmu Team
+ Copyright (c) 2015, OpenEmu Team
  
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -25,7 +25,9 @@
  */
 
 #import "OEDBSmartCollection.h"
+#import "OETheme.h"
 
+NS_ASSUME_NONNULL_BEGIN
 
 @implementation OEDBSmartCollection
 
@@ -34,4 +36,79 @@
     return @"SmartCollection";
 }
 
+#pragma mark - Sidebar Item Protocol
+
+- (NSImage *)sidebarIcon
+{
+    return [[OETheme sharedTheme] imageForKey:@"collections_smart" forState:OEThemeStateDefault];
+}
+
+- (BOOL)isEditableInSidebar
+{
+    return NO;
+}
+
+- (nullable NSString *)sidebarName
+{
+    if(self.OE_isRecentlyAddedCollection)
+    {
+        return NSLocalizedString(@"Recently Added", @"Recently Added Smart Collection Name");
+    }
+    return [self valueForKey:@"name"];
+}
+
+- (void)setSidebarName:(nullable NSString *)newName
+{}
+
+#pragma mark - Game Collection View Item
+
+- (nullable NSString *)collectionViewName
+{
+    if([self OE_isRecentlyAddedCollection])
+    {
+        return NSLocalizedString(@"Recently Added", @"Recently Added Smart Collection Name");
+    }
+    return [self valueForKey:@"name"];
+}
+
+- (BOOL)isCollectionEditable
+{
+    return NO;
+}
+
+- (NSPredicate *)fetchPredicate
+{
+    if([self OE_isRecentlyAddedCollection])
+    {
+        return [NSPredicate predicateWithValue:YES];
+    }
+    return [NSPredicate predicateWithValue:NO];
+}
+
+- (BOOL)shouldShowSystemColumnInListView
+{
+    return YES;
+}
+
+- (NSInteger)fetchLimit
+{
+    return 30;
+}
+
+- (NSArray <NSSortDescriptor *> *)fetchSortDescriptors
+{
+    if([self OE_isRecentlyAddedCollection])
+        return @[[NSSortDescriptor sortDescriptorWithKey:@"importDate" ascending:NO]];
+    return @[];
+}
+
+#pragma mark - Private Methods
+
+- (BOOL)OE_isRecentlyAddedCollection
+{
+    return [[self valueForKey:@"name"] isEqualToString:@"Recently Added"];
+}
+
 @end
+
+NS_ASSUME_NONNULL_END

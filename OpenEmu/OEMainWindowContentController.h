@@ -24,11 +24,8 @@
  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
+@import Foundation;
 
 @protocol OEMainWindowContentController <NSObject>
-
-@optional
-@property(strong) NSImage *cachedSnapshot;
 
 @end

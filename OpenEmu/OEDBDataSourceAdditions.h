@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2011, OpenEmu Team
+ Copyright (c) 2015, OpenEmu Team
  
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -24,55 +24,35 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
 
 #import "OEDBGame.h"
-#import "OEDBSystem.h"
-#import "OEDBCollection.h"
-#import "OEDBSmartCollection.h"
-#import "OEDBCollectionFolder.h"
-
-#import <Quartz/Quartz.h> // for ImageKit
+#import "OEDBSystem+CoreDataProperties.h"
 
 #import "OECoverGridDataSourceItem.h"
-#import "OECoverFlowDataSourceItem.h"
 #import "OESidebarItem.h"
 #import "OEListViewDataSourceItem.h"
 #import "OEDBAllGamesCollection.h"
 
-#import "OECollectionViewItemProtocol.h"
+#import "OEGameCollectionViewItemProtocol.h"
+
+NS_ASSUME_NONNULL_BEGIN
 
 extern NSString * const OECoverGridViewAutoDownloadEnabledKey;
-@interface OEDBGame (DataSourceAdditions) <OECoverGridDataSourceItem, OECoverFlowDataSourceItem, OEListViewDataSourceItem>
+
+@interface OEDBGame (DataSourceAdditions) <OECoverGridDataSourceItem, OEListViewDataSourceItem>
++ (NSImage *)artworkPlacholderWithAspectRatio:(CGFloat)ratio;
 @end
 
 @interface OEDBSystem (DataSourceAdditions) <OESidebarItem> 
 @end
 
+#pragma mark - Implementation of items that can be presented by OEGameCollectionView
 
-@interface OEDBCollection (DataSourceAdditions) <OESidebarItem> 
+@interface OEDBSystem (OECollectionViewItemAdditions) <OEGameCollectionViewItemProtocol>
 @end
 
-@interface OEDBSmartCollection (DataSourceAdditions) <OESidebarItem> 
+@interface OEDBAllGamesCollection (OECollectionViewItemAdditions) <OEGameCollectionViewItemProtocol>
 @end
 
-@interface OEDBCollectionFolder (DataSourceAdditions) <OESidebarItem> 
-@end
-
-#pragma mark -
-#pragma mark Implementation of items that can be presented by CollectionView
-
-@interface OEDBSystem (OECollectionViewItemAdditions) <OECollectionViewItemProtocol>
-@end
-
-@interface OEDBCollection (OECollectionViewItemAdditions) <OECollectionViewItemProtocol>
-@end
-
-@interface OEDBCollectionFolder (OECollectionViewItemAdditions) <OECollectionViewItemProtocol>
-@end
-
-@interface OEDBSmartCollection (OECollectionViewItemAdditions) <OECollectionViewItemProtocol>
-@end
-
-@interface OEDBAllGamesCollection (OECollectionViewItemAdditions) <OECollectionViewItemProtocol>
-@end
+NS_ASSUME_NONNULL_END

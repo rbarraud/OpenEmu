@@ -26,7 +26,10 @@
 
 #import "OESliderCell.h"
 #import "OEControl.h"
-#import "NSImage+OEDrawingAdditions.h"
+#import "OETheme.h"
+#import "OEThemeImage.h"
+
+#import "OpenEmu-Swift.h"
 
 @implementation OESliderCell
 
@@ -41,7 +44,7 @@
 {
     OEThemeState state  = [self OE_currentState];
     NSImage *trackImage = [[self backgroundThemeImage] imageForState:state];
-    NSRect barRect = NSInsetRect(aRect, 3, (NSHeight(aRect)-[self trackThickness])/2.0);
+    NSRect barRect = NSInsetRect(aRect, 1, (NSHeight(aRect)-[self trackThickness])/2.0);
     barRect = [[self controlView] backingAlignedRect:barRect options:NSAlignAllEdgesNearest];
     [trackImage drawInRect:barRect fromRect:NSZeroRect operation:NSCompositeSourceOver fraction:1.0 respectFlipped:YES hints:@{NSImageHintInterpolation:@(NSImageInterpolationNone)}];
 
@@ -149,9 +152,7 @@
 - (void)setThemeImageKey:(NSString *)key
 {
     OEThemeImage *image = [[OETheme sharedTheme] themeImageForKey:key];
-    NSImage *realImage = [image imageForState:OEThemeStateDefault];
     [self setThemeImage:image];
-    [self setKnobThickness:[realImage size].width];
 }
 
 - (void)setBackgroundThemeImage:(OEThemeImage *)backgroundThemeImage

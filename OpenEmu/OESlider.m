@@ -25,7 +25,11 @@
  */
 
 #import "OESlider.h"
-#import "NSImage+OEDrawingAdditions.h"
+#import "OESliderCell.h"
+#import "OETheme.h"
+#import "OEThemeImage.h"
+
+#import "OpenEmu-Swift.h"
 
 @interface OESlider ()
 {
@@ -267,7 +271,6 @@
         [self OE_updateNotifications];
         [self setNeedsDisplay];
     }
-
 }
 
 - (OEThemeImage*)levelThemeImage
@@ -288,56 +291,46 @@
 
 
 #pragma mark - Old Stuff
-+ (void)initialize
+@synthesize maxHint, minHint;
+- (instancetype)init
 {
-    // Make sure not to reinitialize for subclassed objects
-    if (self != [OESlider class])
-        return;
-
-    NSImage *image = [NSImage imageNamed:@"grid_slider_large"];
-    [image setName:@"grid_slider_large_enabled" forSubimageInRect:NSMakeRect(0, 0, 10, 10)];
-    [image setName:@"grid_slider_large_disabled" forSubimageInRect:NSMakeRect(10, 0, 10, 10)];
-    
-    image = [NSImage imageNamed:@"grid_slider_small"];
-    [image setName:@"grid_slider_small_enabled" forSubimageInRect:NSMakeRect(0, 0, 7, 7)];
-    [image setName:@"grid_slider_small_disabled" forSubimageInRect:NSMakeRect(7, 0, 7, 7)];
+    self = [super init];
+    if (self) {
+        hintImagesState = -1;
+    }
+    return self;
 }
 
-@synthesize maxHint, minHint;
-
-- (void)setHintImages
+- (void)updateHintImages
 {
     BOOL enabled = [self isEnabled];
     BOOL active = [[self window] isMainWindow];
-    if(hintImagesShowActive == (enabled && active)) return;
-    
-    if(enabled && active)
-    {
-        if([self maxHint])[[self maxHint] setImage:[NSImage imageNamed:@"grid_slider_large_enabled"]];
-        if([self minHint])[[self minHint] setImage:[NSImage imageNamed:@"grid_slider_small_enabled"]];
-    } 
-    else 
-    {
-        if([self maxHint])[[self maxHint] setImage:[NSImage imageNamed:@"grid_slider_large_disabled"]];
-        if([self minHint])[[self minHint] setImage:[NSImage imageNamed:@"grid_slider_small_disabled"]];
-    }
-    hintImagesShowActive = (enabled && active);
+
+    OEThemeState state = active ? OEThemeInputStateWindowActive : OEThemeInputStateWindowInactive;
+    state |= enabled ? OEThemeInputStateEnabled : OEThemeInputStateDisabled;
+
+    if(hintImagesState == state) return;
+
+    OEThemeImage *smallHint = [[OETheme sharedTheme] themeImageForKey:@"grid_slider_small"];
+    OEThemeImage *largeHint = [[OETheme sharedTheme] themeImageForKey:@"grid_slider_large"];
+
+    [[self maxHint] setImage:[largeHint imageForState:state]];
+    [[self minHint] setImage:[smallHint imageForState:state]];
+
+    hintImagesState = state;
 }
 
 - (void)awakeFromNib
 {
-    if([self maxHint])[[self maxHint] setImage:[NSImage imageNamed:@"grid_slider_large_disabled"]];
-    if([self minHint])[[self minHint] setImage:[NSImage imageNamed:@"grid_slider_small_disabled"]];
-    
     [[self maxHint] setImageAlignment:NSImageAlignTopLeft];
     
-    hintImagesShowActive = NO;
+    [self updateHintImages];
 }
 
 - (void)drawRect:(NSRect)dirtyRect
 {
     [super drawRect:dirtyRect];
-    [self performSelectorInBackground:@selector(setHintImages) withObject:nil];
+    [self updateHintImages];
 }
 
 @end

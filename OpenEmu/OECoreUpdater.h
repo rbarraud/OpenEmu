@@ -24,8 +24,10 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
+@import Foundation;
 #import "OECoreDownload.h"
+
+NS_ASSUME_NONNULL_BEGIN
 
 extern NSString *const OECoreUpdaterErrorDomain;
 enum _OECoreUpdaterErrorCode
@@ -38,9 +40,10 @@ enum _OECoreUpdaterErrorCode
 
 @interface OECoreUpdater : NSObject <OECoreDownloadDelegate>
 
-+ (id)sharedUpdater;
+@property(class, readonly) OECoreUpdater *sharedUpdater;
 
 - (void)checkForUpdates;
+- (void)checkForUpdatesAndInstall;
 - (void)checkForNewCores:(NSNumber *)fromModal;
 
 - (void)installCoreForGame:(OEDBGame *)game withCompletionHandler:(void(^)(OECorePlugin *plugin, NSError *error))handler;
@@ -49,8 +52,10 @@ enum _OECoreUpdaterErrorCode
 
 @property(readonly) NSArray *coreList;
 
-@property(copy) void(^completionHandler)(OECorePlugin *plugin, NSError *);
-@property       NSString *coreIdentifier;
-@property       OEHUDAlert *alert;
-@property       OECoreDownload *coreDownload;
+@property(copy, nullable) void(^completionHandler)(OECorePlugin * _Nullable plugin, NSError * _Nullable);
+@property(nullable) NSString *coreIdentifier;
+@property(nullable) OEHUDAlert *alert;
+@property(nullable) OECoreDownload *coreDownload;
 @end
+
+NS_ASSUME_NONNULL_END

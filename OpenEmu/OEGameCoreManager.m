@@ -26,24 +26,28 @@
 
 #import "OEGameCoreManager.h"
 #import "OECorePlugin.h"
-#import "OEGameCoreHelper.h"
-#import "OpenEmuHelperApp.h"
-#import "OEGameDocument.h"
-#import "OETaskWrapper.h"
 #import "OEGameCoreManager_Internal.h"
+#import "OESystemPlugin.h"
 
 #import <OpenEmuBase/OpenEmuBase.h>
 
+NSString * const OEGameCoreErrorDomain = @"OEGameCoreErrorDomain";
+
 @implementation OEGameCoreManager
 
-- (id)initWithROMPath:(NSString *)romPath corePlugin:(OECorePlugin *)plugin systemController:(OESystemController *)systemController displayHelper:(id<OEGameCoreDisplayHelper>)displayHelper
+- (instancetype)initWithROMPath:(NSString *)romPath romCRC32:(NSString *)romCRC32 romMD5:(NSString *)romMD5 romHeader:(NSString *)romHeader romSerial:(NSString *)romSerial systemRegion:(NSString *)systemRegion corePlugin:(OECorePlugin *)plugin systemPlugin:(OESystemPlugin *)systemPlugin gameCoreOwner:(id<OEGameCoreOwner>)gameCoreOwner
 {
     if((self = [super init]))
     {
         _ROMPath          = romPath;
+        _ROMCRC32         = romCRC32;
+        _ROMMD5           = romMD5;
+        _ROMHeader        = romHeader;
+        _ROMSerial        = romSerial;
+        _systemRegion     = systemRegion;
         _plugin           = plugin;
-        _systemController = systemController;
-        _displayHelper    = displayHelper;
+        _systemPlugin     = systemPlugin;
+        _gameCoreOwner    = gameCoreOwner;
     }
 
     return self;
@@ -51,7 +55,7 @@
 
 - (NSString *)description
 {
-    return [NSString stringWithFormat:@"<%@ %p, ROM: %@, System: %@, Core: %@, Display Helper: %@>", [self class], self, _ROMPath, [_plugin bundleIdentifier], [_systemController systemIdentifier], _displayHelper];
+    return [NSString stringWithFormat:@"<%@ %p, ROM: %@, System: %@, Core: %@, Display Helper: %@>", [self class], self, _ROMPath, [_plugin bundleIdentifier], [_systemPlugin systemIdentifier], _gameCoreOwner];
 }
 
 - (void)stop
@@ -59,7 +63,7 @@
     [self doesNotImplementSelector:_cmd];
 }
 
-- (void)loadROMWithCompletionHandler:(void(^)(id systemClient))completionHandler errorHandler:(void(^)(NSError *))errorHandler;
+- (void)loadROMWithCompletionHandler:(void(^)(void))completionHandler errorHandler:(void(^)(NSError *))errorHandler;
 {
     [self doesNotImplementSelector:_cmd];
 }
@@ -79,14 +83,14 @@
     [[self gameCoreHelper] setAudioOutputDeviceID:deviceID];
 }
 
-- (void)setDrawSquarePixels:(BOOL)drawSquarePixels;
-{
-    [[self gameCoreHelper] setDrawSquarePixels:drawSquarePixels];
-}
-
 - (void)setCheat:(NSString *)cheatCode withType:(NSString *)type enabled:(BOOL)enabled
 {
     [[self gameCoreHelper] setCheat:cheatCode withType:type enabled:enabled];
+}
+
+- (void)setDisc:(NSUInteger)discNumber
+{
+    [[self gameCoreHelper] setDisc:discNumber];
 }
 
 - (void)setupEmulationWithCompletionHandler:(void(^)(IOSurfaceID surfaceID, OEIntSize screenSize, OEIntSize aspectSize))handler;
@@ -151,6 +155,31 @@
              block(success, error);
          });
      }];
+}
+
+- (void)handleMouseEvent:(OEEvent *)event
+{
+    [self.gameCoreHelper handleMouseEvent:event];
+}
+
+- (void)setHandleEvents:(BOOL)handleEvents
+{
+    [self.gameCoreHelper setHandleEvents:handleEvents];
+}
+
+- (void)setHandleKeyboardEvents:(BOOL)handleKeyboardEvents
+{
+    [self.gameCoreHelper setHandleKeyboardEvents:handleKeyboardEvents];
+}
+
+- (void)systemBindingsDidSetEvent:(OEHIDEvent *)event forBinding:(__kindof OEBindingDescription *)bindingDescription playerNumber:(NSUInteger)playerNumber
+{
+    [self.gameCoreHelper systemBindingsDidSetEvent:event forBinding:bindingDescription playerNumber:playerNumber];
+}
+
+- (void)systemBindingsDidUnsetEvent:(OEHIDEvent *)event forBinding:(__kindof OEBindingDescription *)bindingDescription playerNumber:(NSUInteger)playerNumber
+{
+    [self.gameCoreHelper systemBindingsDidUnsetEvent:event forBinding:bindingDescription playerNumber:playerNumber];
 }
 
 @end

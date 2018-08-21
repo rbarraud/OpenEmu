@@ -24,7 +24,10 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
+@import Foundation;
+
 @interface NSArray (OEAdditions)
 - (id)firstObjectMatchingBlock:(BOOL(^)(id))block;
+- (NSArray*)arrayByMakingObjectsPerformSelector:(SEL)selector;
+- (NSArray*)arrayByEvaluatingBlock:(id (^)(id obj, NSUInteger idx, BOOL *stop))block;
 @end

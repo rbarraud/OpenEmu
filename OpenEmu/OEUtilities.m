@@ -26,6 +26,7 @@
 
 #import "OEUtilities.m"
 #import <CommonCrypto/CommonDigest.h>
+#import "OEBuildVersion.h"
 
 // output must be at least 2*len+1 bytes
 void tohex(const unsigned char *input, size_t len, char *output)
@@ -69,7 +70,7 @@ NSString *temporaryDirectoryForDecompressionOfPath(NSString *aPath)
 
     // First, check that known location in case we've already dealt with this one
     unsigned char hash[CC_SHA1_DIGEST_LENGTH];
-    CC_SHA1([aPath UTF8String], (CC_LONG)strlen([aPath UTF8String]), hash);
+    CC_SHA1(aPath.fileSystemRepresentation, (CC_LONG)strlen(aPath.fileSystemRepresentation), hash);
 
     char hexhash[2*CC_SHA1_DIGEST_LENGTH+1];
     tohex(hash, CC_SHA1_DIGEST_LENGTH, hexhash);
@@ -96,34 +97,76 @@ NSString *temporaryDirectoryForDecompressionOfPath(NSString *aPath)
     return folder;
 }
 
-// According to http://stackoverflow.com/questions/11072804/mac-os-x-10-8-replacement-for-gestalt-for-testing-os-version-at-runtime
-// and http://cocoadev.com/wiki/DeterminingOSVersion
-// this is the preferred way of getting the system version at runtime
-bool GetSystemVersion(int *major, int *minor, int *bugfix)
+#ifdef DebugLocalization
+static NSFileHandle *OELocalizationLog = nil;
+static NSMutableDictionary *OELocalizationTableLog = nil;
+NSString *OELogLocalizedString(NSString *key, NSString *comment, NSString *fileName, int line, const char* function, NSString *table)
 {
-	static int mMajor = 10;
-	static int mMinor = 8;
-	static int mBugfix = 0;
-    
-	static dispatch_once_t onceToken;
-	dispatch_once(&onceToken, ^{
-		NSString* versionString = [[NSDictionary dictionaryWithContentsOfFile:@"/System/Library/CoreServices/SystemVersion.plist"] objectForKey:@"ProductVersion"];
-		NSArray* versions = [versionString componentsSeparatedByString:@"."];
-		check( versions.count >= 2 );
-		if ( versions.count >= 1 ) {
-			mMajor = [versions[0] intValue];
-		}
-		if ( versions.count >= 2 ) {
-			mMinor = [versions[1] intValue];
-		}
-		if ( versions.count >= 3 ) {
-			mBugfix = [versions[2] intValue];
-		}
-	});
-    
-    if(major  != NULL) *major = mMajor;
-    if(minor  != NULL) *minor = mMinor;
-    if(bugfix != NULL) *bugfix = mBugfix;
-    
-    return YES;
+    NSFileHandle *handle = nil;
+    if(table == nil && OELocalizationLog == nil)
+    {
+        NSURL *url = [NSURL fileURLWithPath:[@"~/Desktop/OpenEmu Runtime Analysis.strings" stringByExpandingTildeInPath]];
+        [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
+        [[NSFileManager defaultManager] createFileAtPath:[url path] contents:[NSData data] attributes:nil];
+        OELocalizationLog = [NSFileHandle fileHandleForWritingToURL:url error:nil];
+
+        NSString *version = [NSString stringWithFormat:@"/*%@*/\n", LONG_BUILD_VERSION];
+        [OELocalizationLog writeData:[version dataUsingEncoding:NSUTF8StringEncoding]];
+    }
+    else if(table != nil && [OELocalizationTableLog objectForKey:table] == nil)
+    {
+        if(OELocalizationTableLog == nil) OELocalizationTableLog = [NSMutableDictionary dictionary];
+        NSString *path = [NSString stringWithFormat:@"~/Desktop/OpenEmu Runtime Analysis (%@).strings", table];
+        NSURL *url = [NSURL fileURLWithPath:[path stringByExpandingTildeInPath]];
+        [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
+        [[NSFileManager defaultManager] createFileAtPath:[url path] contents:[NSData data] attributes:nil];
+        NSFileHandle *h = [NSFileHandle fileHandleForWritingToURL:url error:nil];
+
+        NSString *version = [NSString stringWithFormat:@"/*%@*/\n", LONG_BUILD_VERSION];
+        [h writeData:[version dataUsingEncoding:NSUTF8StringEncoding]];
+
+        [OELocalizationTableLog setObject:h forKey:table];
+    }
+
+    if(table == nil) handle = OELocalizationLog;
+    else handle = [OELocalizationTableLog objectForKey:table];
+
+    {
+        NSString *escapedKey = [key stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+
+        NSString *value = [escapedKey copy];
+        NSError *error = nil;
+        NSRegularExpression *ex = [NSRegularExpression regularExpressionWithPattern:@"%[0-9]*\\.*[0-9]*[hlqLztj]*[%dDuUxXoOfeEgGcCsSpaAF@]" options:0 error:&error];
+        NSArray *matches = [ex matchesInString:value options:0 range:NSMakeRange(0, [key length])];
+        if([matches count] > 1)
+        {
+            for(NSInteger i=[matches count]; i > 0; i--)
+            {
+                NSTextCheckingResult *match = [matches objectAtIndex:i-1];
+                NSRange range = [match range];
+
+                NSMutableString *replacement = [NSMutableString stringWithFormat:@"%%%ld$", i];
+
+                NSRegularExpression *ex2 = [NSRegularExpression regularExpressionWithPattern:@"[hlqLztj]*[%dDuUxXoOfeEgGcCsSpaAF@]" options:0 error:nil];
+                NSRange r = [[[ex2 matchesInString:value options:0 range:range] lastObject] range];
+                [replacement appendString:[value substringWithRange:r]];
+
+                value = [value stringByReplacingCharactersInRange:range withString:replacement];
+            }
+        } else {
+            value = key;
+        }
+
+
+        NSString *string = [NSString stringWithFormat:@"/*r%@%@%@%d%@%@*/ \"%@\" = \"%@\";\n",
+                            OELocalizationSeparationString, fileName,
+                            OELocalizationSeparationString, line,
+                            OELocalizationSeparationString, comment,
+                            escapedKey, value];
+        NSData *data = [string dataUsingEncoding:NSUTF8StringEncoding];
+        [handle writeData:data];
+    }
+
+    return [@"[L]" stringByAppendingString:NSLocalizedString(key, comment)];
 }
+#endif

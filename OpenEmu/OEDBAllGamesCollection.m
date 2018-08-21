@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2011, OpenEmu Team
+ Copyright (c) 2015, OpenEmu Team
  
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -25,6 +25,9 @@
  */
 
 #import "OEDBAllGamesCollection.h"
+#import "OETheme.h"
+
+NS_ASSUME_NONNULL_BEGIN
 
 @implementation OEDBAllGamesCollection
 
@@ -40,7 +43,7 @@
 
 - (NSImage *)sidebarIcon
 {
-    return [NSImage imageNamed:@"collections_smart"];
+    return [[OETheme sharedTheme] imageForKey:@"collections_smart" forState:OEThemeStateDefault];
 }
 
 - (NSString *)sidebarName
@@ -55,7 +58,7 @@
 
 - (NSString*)viewControllerClassName
 {
-    return @"OECollectionViewController";
+    return @"OEGameCollectionViewController";
 }
 
 - (NSString*)sidebarID
@@ -84,3 +87,5 @@
 }
 
 @end
+
+NS_ASSUME_NONNULL_END

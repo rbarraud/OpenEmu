@@ -24,18 +24,18 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
-
+@import Foundation;
 #import "OESidebarOutlineView.h"
 
 extern NSString *const OESuppressRemoveCollectionConfirmationKey;
+extern NSString *const OESidebarSelectionDidChangeNotificationName;
 
 extern NSString *const OESidebarMinWidth;
 extern NSString *const OESidebarMaxWidth;
 extern NSString *const OEMainViewMinWidth;
 
-@class OELibraryDatabase, OESidebarOutlineView;
-@protocol OECollectionViewItemProtocol;
+@class OELibraryDatabase;
+@protocol OEGameCollectionViewItemProtocol;
 @protocol OESidebarItem;
 
 @interface OESidebarController : NSViewController <NSOutlineViewDelegate, NSOutlineViewDataSource>
@@ -57,11 +57,13 @@ extern NSString *const OEMainViewMinWidth;
 - (void)removeItemForMenuItem:(NSMenuItem *)menuItem;
 - (void)renameItemForMenuItem:(NSMenuItem *)menuItem;
 
+- (void)changeDefaultCore:(id)sender;
+
 - (id<OESidebarItem>)selectedSidebarItem;
 
-@property (retain, nonatomic) OESidebarOutlineView *view;
+@property (strong) OESidebarOutlineView *view;
 @property (strong, nonatomic) OELibraryDatabase *database;
 @property (strong, readonly) NSArray *groups;
-@property (strong, readonly) NSArray *systems, *collections, *media;
+@property (strong, readonly) NSArray *systems, *collections;
 @property (nonatomic, strong, readwrite) id editingItem;
 @end

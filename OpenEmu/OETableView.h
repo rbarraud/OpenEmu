@@ -24,7 +24,7 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
+@import Foundation;
 
 @class OETableView;
 
@@ -32,7 +32,6 @@
 @protocol OETableViewMenuSource <NSObject>
 - (NSMenu *)tableView:(OETableView*)tableView menuForItemsAtIndexes:(NSIndexSet*)indexes;
 @end
-
 
 @interface OETableView : NSTableView
 - (void)setHeaderClickable:(BOOL)flag;

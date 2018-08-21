@@ -309,5 +309,53 @@
 		<key>OEArcadeButtonInsertCoin</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonShare</string>
 	</dict>
+	<key>OEControllerGCExtendedGamepadProfile</key>
+	<dict>
+		<key>OEArcadeButtonUp</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadUp</string>
+		<key>OEArcadeButtonDown</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadDown</string>
+		<key>OEArcadeButtonLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadLeft</string>
+		<key>OEArcadeButtonRight</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadRight</string>
+		<key>OEArcadeButton1</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonY</string>
+		<key>OEArcadeButton2</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL1</string>
+		<key>OEArcadeButton3</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonR1</string>
+		<key>OEArcadeButton4</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonX</string>
+		<key>OEArcadeButton5</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonA</string>
+		<key>OEArcadeButton6</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonB</string>
+		<key>OEArcadeButtonP1Start</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonHome</string>
+		<key>OEArcadeButtonInsertCoin</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonR2</string>
+	</dict>
+	<key>OEControllerNintendoSwitchProController</key>
+	<dict>
+		<key>OEArcadeButtonUp</key>
+		<string>OEControllerNintendoSwitchProControllerDPadUp</string>
+		<key>OEArcadeButton1</key>
+		<string>OEControllerNintendoSwitchProControllerButtonX</string>
+		<key>OEArcadeButton2</key>
+		<string>OEControllerNintendoSwitchProControllerButtonL</string>
+		<key>OEArcadeButton3</key>
+		<string>OEControllerNintendoSwitchProControllerButtonR</string>
+		<key>OEArcadeButton4</key>
+		<string>OEControllerNintendoSwitchProControllerButtonY</string>
+		<key>OEArcadeButton5</key>
+		<string>OEControllerNintendoSwitchProControllerButtonB</string>
+		<key>OEArcadeButton6</key>
+		<string>OEControllerNintendoSwitchProControllerButtonA</string>
+		<key>OEArcadeButtonP1Start</key>
+		<string>OEControllerNintendoSwitchProControllerButtonPlus</string>
+		<key>OEArcadeButtonInsertCoin</key>
+		<string>OEControllerNintendoSwitchProControllerButtonMinus</string>
+	</dict>
 </dict>
 </plist>

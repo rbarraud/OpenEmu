@@ -9,7 +9,7 @@
 	<key>CFBundleIconFile</key>
 	<string></string>
 	<key>CFBundleIdentifier</key>
-	<string>org.openemu.${PRODUCT_NAME:rfc1034identifier}</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -23,9 +23,9 @@
 	<key>CFBundleVersion</key>
 	<string>1.2</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2013 OpenEmu Team. All rights reserved.</string>
+	<string>Copyright © 2015 OpenEmu Team. All rights reserved.</string>
 	<key>NSPrincipalClass</key>
-	<string>OESystemController</string>
+	<string>OEVectrexSystemController</string>
 	<key>OEControlListKey</key>
 	<array>
 		<array>
@@ -109,6 +109,7 @@
 	<array>
 		<string>vec</string>
 		<string>gam</string>
+		<string>bin</string>
 	</array>
 	<key>OEGenericControlNamesKey</key>
 	<array>

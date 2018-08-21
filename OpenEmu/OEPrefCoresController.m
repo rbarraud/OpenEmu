@@ -26,12 +26,14 @@
 #import "OEPrefCoresController.h"
 
 #import "OETableView.h"
-#import "OECenteredTextFieldCell.h"
 #import "OECoreTableButtonCell.h"
 #import "OECoreTableProgressCell.h"
+#import "OECenteredTextFieldCell.h"
 
 #import "OECoreUpdater.h"
 #import "OECoreDownload.h"
+
+#import "OpenEmu-Swift.h"
 
 @interface OEPrefCoresController ()
 - (void)OE_updateOrInstallItemAtRow:(NSInteger)rowIndex;
@@ -53,20 +55,21 @@ static void *const _OEPrefCoresCoreListContext = (void *)&_OEPrefCoresCoreListCo
 
 - (void)awakeFromNib
 {        
-    [[OECoreUpdater sharedUpdater] addObserver:self forKeyPath:@"coreList" options:NSKeyValueChangeInsertion | NSKeyValueChangeRemoval | NSKeyValueChangeReplacement context:_OEPrefCoresCoreListContext];
+    [[OECoreUpdater sharedUpdater] addObserver:self
+                                    forKeyPath:@"coreList"
+                                       options:NSKeyValueChangeInsertion | NSKeyValueChangeRemoval | NSKeyValueChangeReplacement
+                                       context:_OEPrefCoresCoreListContext];
     
-    [[[self coresTableView] tableColumns] enumerateObjectsUsingBlock:
-     ^(id obj, NSUInteger idx, BOOL *stop)
-     {
-         OECenteredTextFieldCell *cell = [obj dataCell];
-         [cell setWidthInset:8.0];
-     }];
+    for (id obj in self.coresTableView.tableColumns) {
+        OECenteredTextFieldCell *cell = [obj dataCell];
+        cell.widthInset = 8.0;
+    }
     
-    [[self coresTableView] setDelegate:self];
-    [[self coresTableView] setDataSource:self];
-    [(OETableView *)[self coresTableView] setHeaderClickable:NO];
+    self.coresTableView.delegate = self;
+    self.coresTableView.dataSource = self;
+    ((OETableView *)self.coresTableView).headerClickable = NO;
     
-    [[OECoreUpdater sharedUpdater] checkForNewCores:@( NO )];
+    [[OECoreUpdater sharedUpdater] checkForNewCores:@(NO)];
     [[OECoreUpdater sharedUpdater] checkForUpdates];
 }
 
@@ -125,7 +128,7 @@ static void *const _OEPrefCoresCoreListContext = (void *)&_OEPrefCoresCoreListCo
             return [NSNumber numberWithFloat:[plugin progress]];
         }
         
-        return [plugin canBeInstalled] || [plugin hasUpdate] ? @0 : [plugin version];
+        return [plugin canBeInstalled] || [plugin hasUpdate] ? @"" : [plugin version];
     }
     return plugin;
 }
@@ -150,9 +153,14 @@ static void *const _OEPrefCoresCoreListContext = (void *)&_OEPrefCoresCoreListCo
             color = [NSColor colorWithDeviceWhite:[[self OE_coreDownloadAtRow:rowIndex] canBeInstalled] ? 0.44 : 0.86 alpha:1.0];
         }
         
-        attr = [NSDictionary dictionaryWithObjectsAndKeys:
-                [[NSFontManager sharedFontManager] fontWithFamily:@"Lucida Grande" traits:0 weight:weight size:11.0], NSFontAttributeName, 
-                color, NSForegroundColorAttributeName, nil];
+        NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+        [style setLineBreakMode:NSLineBreakByTruncatingTail];
+        
+        attr = @{
+                 NSFontAttributeName : [NSFont systemFontOfSize:11 weight:weight],
+                 NSForegroundColorAttributeName : color,
+                 NSParagraphStyleAttributeName : style,
+                 };
         [aCell setAttributedStringValue:[[NSAttributedString alloc] initWithString:[aCell stringValue] attributes:attr]];
     }
 }
@@ -189,28 +197,40 @@ static void *const _OEPrefCoresCoreListContext = (void *)&_OEPrefCoresCoreListCo
 
 - (BOOL)tableView:(NSTableView *)tableView shouldTrackCell:(NSCell *)cell forTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
 {
-    DLog();
     return [cell isKindOfClass:[NSButtonCell class]];
 }
 
 - (BOOL)tableView:(NSTableView *)tableView shouldSelectRow:(NSInteger)row
 {
-    DLog();
     return NO;
 }
 
 - (BOOL)tableView:(NSTableView *)tableView shouldEditTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
 {
-    DLog();
     return [[self tableView:tableView dataCellForTableColumn:tableColumn row:row] isKindOfClass:[NSButtonCell class]];
 }
 
 - (void)tableView:(NSTableView *)aTableView setObjectValue:(id)anObject forTableColumn:(NSTableColumn *)aTableColumn row:(NSInteger)rowIndex
 {
-    DLog();
     NSString *columnIdentifier = [aTableColumn identifier];
     if([columnIdentifier isEqualToString:@"versionColumn"] && [anObject boolValue])
         [self OE_updateOrInstallItemAtRow:rowIndex];
+}
+
+- (NSString*)tableView:(NSTableView *)tableView toolTipForCell:(NSCell *)cell rect:(NSRectPointer)rect tableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row mouseLocation:(NSPoint)mouseLocation
+{
+    const NSString *columnIdentifier = [tableColumn identifier];
+    const OECoreDownload *plugin     = [self OE_coreDownloadAtRow:row];
+
+    if([columnIdentifier isEqualToString:@"systemColumn"])
+    {
+        return [[plugin systemNames] componentsJoinedByString:@", "];
+    }
+
+    if([cell isKindOfClass:[NSTextFieldCell class]])
+        return [cell stringValue];
+    
+    return @"";
 }
 
 #pragma mark -
@@ -228,12 +248,12 @@ static void *const _OEPrefCoresCoreListContext = (void *)&_OEPrefCoresCoreListCo
 
 - (NSString *)localizedTitle
 {
-    return NSLocalizedString([self title], "");
+    return NSLocalizedString([self title], @"Preferences: Cores Toolbar item");
 }
 
 - (NSSize)viewSize
 {
-    return NSMakeSize(423, 474);
+    return NSMakeSize(423, 460);
 }
 
 @end

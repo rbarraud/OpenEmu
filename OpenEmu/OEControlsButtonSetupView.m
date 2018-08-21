@@ -24,24 +24,21 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Quartz/Quartz.h>
-
 #import "OEControlsButtonSetupView.h"
 
 #import "OEControlsKeyButton.h"
-#import "OEControlsKeyLabelCell.h"
-#import "OEControlsKeyHeadlineCell.h"
 #import "OEControlsKeySeparatorView.h"
 #import "OEControlsSectionTitleView.h"
-
-#import "NSClipView+OEAnimatedScrolling.h"
+#import "OEControlsKeyHeadlineCell.h"
+#import "OEControlsKeyLabelCell.h"
 
 #import "OEUIDrawingUtils.h"
 
 #import <OpenEmuSystem/OpenEmuSystem.h>
 
-#import "NSArray+OEAdditions.h"
-#import "OEUtilities.h"
+#import "OpenEmu-Swift.h"
+
+@import Quartz;
 
 NSString * const OEControlsButtonHighlightRollsOver = @"ButtonHighlightRollsOver";
 
@@ -71,12 +68,6 @@ static void *const _OEControlsSetupViewFrameSizeContext = (void *)&_OEControlsSe
 {
     self = [super initWithFrame:frame];
     return self;
-}
-
-- (void)setFrame:(NSRect)frameRect
-{
-    frameRect.size.width = MIN(frameRect.size.width, [self visibleRect].size.width);
-    [super setFrame:frameRect];
 }
 
 - (void)setupWithControlList:(NSArray *)controlList;
@@ -149,7 +140,7 @@ static const CGFloat leftGap             =  16.0;
 static const CGFloat itemHeight          =  24.0;
 static const CGFloat verticalItemSpacing =   9.0; // item bottom to top
 static const CGFloat labelButtonSpacing  =   5.0;
-static const CGFloat buttonWidth         = 136.0;
+static const CGFloat buttonWidth         = 130.0;
 static const CGFloat minimumFrameHeight  = 259.0;
 
 static const CGFloat sectionTitleHeight  =  25.0;
@@ -180,11 +171,11 @@ NSComparisonResult headerSortingFunction(id obj1, id obj2, void *context)
         for(NSArray *group in groups)
             for(NSUInteger j = 0; j < [group count]; j += 2)
             {
-                NSView *item = [group objectAtIndex:j];
+                id item = [group objectAtIndex:j];
                 [self addSubview:item];
                 
                 // handle headline cell
-                if([item isKindOfClass:[NSTextField class]] && [[(NSControl*)item cell] isKindOfClass:[OEControlsKeyHeadlineCell class]])
+                if([item isKindOfClass:[NSTextField class]] && [[item cell] isKindOfClass:[OEControlsKeyHeadlineCell class]])
                 {
                     j--;
                     continue;
@@ -209,13 +200,6 @@ NSComparisonResult headerSortingFunction(id obj1, id obj2, void *context)
 
 - (void)layoutSubviews:(BOOL)animated
 {
-    // Disable animations if running on lion
-    int majorVersion, minorVersion;
-    if(GetSystemVersion(&majorVersion, &minorVersion, NULL) && majorVersion == 10 && minorVersion == 7)
-    {
-        animated = NO;
-    }
-    
 #define animated(_X_) animated?[_X_ animator]:_X_
 #define reflectSectionState(_ITEM_, _RECT_) if(sectionCollapsed){[_ITEM_ setAlphaValue:0.0];_RECT_.origin.y = headerOrigin.y; _RECT_.size.height=sectionTitleHeight; }else{[_ITEM_ setAlphaValue:1.0];}
     if(animated) [CATransaction begin];
@@ -284,14 +268,20 @@ NSComparisonResult headerSortingFunction(id obj1, id obj2, void *context)
                 [item setFrame:NSIntegralRect(buttonRect)];
 
                 NSTextField *label = animated([group objectAtIndex:j + 1]);
-                NSRect labelRect = NSIntegralRect(NSMakeRect(leftGap, buttonRect.origin.y - 4, width - leftGap - labelButtonSpacing - buttonWidth, itemHeight));
+                NSRect labelRect = NSIntegralRect(NSMakeRect(leftGap, buttonRect.origin.y + buttonRect.size.height/2 + 1, width - leftGap - labelButtonSpacing - buttonWidth, 100000));
                 
-                BOOL multiline = [label attributedStringValue].size.width + 5 >= labelRect.size.width;
-                if(multiline)
+                NSSize labelFitSize = [label.cell cellSizeForBounds:labelRect];
+                if (labelFitSize.height > 30)
                 {
-                    labelRect.size.height += 10;
-                    labelRect.origin.y    -= 3;
+                    /* If the label size returned is too tall, enlarge the
+                     * label to attempt fitting in 2 lines anyway */
+                    labelRect.origin.x -= 5;
+                    labelRect.size.width += 5;
+                    labelFitSize = [label.cell cellSizeForBounds:labelRect];
                 }
+                labelRect.origin.y -= labelFitSize.height / 2;
+                labelRect.size.height = labelFitSize.height;
+                
                 reflectSectionState(label, labelRect);
                 [label setFrame:labelRect];
                 
@@ -306,8 +296,7 @@ NSComparisonResult headerSortingFunction(id obj1, id obj2, void *context)
 
     [self layoutSectionHeadings:nil];
 
-    if(animated) [CATransaction flush];
-#undef hideBehindSectionTitle
+    if(animated) [CATransaction commit];
 #undef animated
 }
 
@@ -541,7 +530,7 @@ NSComparisonResult headerSortingFunction(id obj1, id obj2, void *context)
     NSAssert([controlList count]%2==0, @"control list has to have an even number of items (headline and group pairs)");
     for(NSUInteger i=0; i < [controlList count]; i+=2) // Sections
     {
-        NSString *sectionTitle    = [controlList objectAtIndex:i];
+        NSString *sectionTitle    = NSLocalizedStringFromTable([controlList objectAtIndex:i], @"ControlLabels", @"Section Title");
         NSArray  *sectionContents = [controlList objectAtIndex:i+1];
 
         for(NSArray *group in sectionContents)
@@ -556,7 +545,7 @@ NSComparisonResult headerSortingFunction(id obj1, id obj2, void *context)
                     if([row isEqualToString:@"-"])
                         [self OE_addRowSeperator];
                     else
-                        [self OE_addGroupLabel:row];
+                        [self OE_addGroupLabel:NSLocalizedStringFromTable(row, @"ControlLabels", @"Group Label")];
                 }
                 else if([row isKindOfClass:[NSDictionary class]]) {
                     NSString *fontFamily = nil;
@@ -565,8 +554,10 @@ NSComparisonResult headerSortingFunction(id obj1, id obj2, void *context)
                         fontFamily = [row objectForKey:OEControlListKeyFontFamilyKey];
                     }
 
+                    NSString *label = NSLocalizedStringFromTable([row objectForKey:OEControlListKeyLabelKey], @"ControlLabels", @"Button Label");
+
                     [self OE_addButtonWithName:[row objectForKey:OEControlListKeyNameKey]
-                                         label:[[row objectForKey:OEControlListKeyLabelKey] stringByAppendingString:@":"] fontFamily:fontFamily];
+                                         label:[label stringByAppendingString:@":"] fontFamily:fontFamily];
                 }
             }
         }
@@ -619,14 +610,10 @@ NSComparisonResult headerSortingFunction(id obj1, id obj2, void *context)
     
     NSTextField     *labelField     = [[NSTextField alloc] initWithFrame:NSZeroRect];
     OEControlsKeyLabelCell *labelFieldCell = [[OEControlsKeyLabelCell alloc] init];
+    [labelFieldCell setFontFamily:fontFamily];
 
     [labelField setCell:labelFieldCell];
     [labelField setStringValue:aLabel];
-
-    if(fontFamily != nil)
-    {
-        [labelFieldCell setFontFamily:fontFamily];
-    }
 
     [currentGroup addObject:labelField];
 }
@@ -657,6 +644,9 @@ NSComparisonResult headerSortingFunction(id obj1, id obj2, void *context)
 
 - (id)OE_createSectionHeadingWithName:(NSString*)name collapsible:(BOOL)flag
 {
+    // Don't collapse groups, less noticeable
+    flag = NO;
+
     OEControlsSectionTitleView *labelField = [[OEControlsSectionTitleView alloc] initWithFrame:NSZeroRect];
     [labelField setStringValue:name];
     [labelField setCollapsible:flag];

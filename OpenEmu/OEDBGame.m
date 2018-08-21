@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2011, OpenEmu Team
+ Copyright (c) 2015, OpenEmu Team
  
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -24,19 +24,20 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import "OEDBGame.h"
+#import "OEDBGame+CoreDataProperties.h"
 
 #import "OELibraryDatabase.h"
 
 #import "OEDBSystem.h"
-#import "OEDBRom.h"
-
+#import "OEDBRom+CoreDataProperties.h"
 #import "OEDBImage.h"
 
 #import "OEGameInfoHelper.h"
+#import "OEDownload.h"
 
 #import "NSFileManager+OEHashingAdditions.h"
-#import "NSArray+OEAdditions.h"
+
+NS_ASSUME_NONNULL_BEGIN
 
 NSString *const OEPasteboardTypeGame = @"org.openemu.game";
 NSString *const OEDisplayGameTitle = @"displayGameTitle";
@@ -44,9 +45,13 @@ NSString *const OEDisplayGameTitle = @"displayGameTitle";
 NSString *const OEGameArtworkFormatKey = @"artworkFormat";
 NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
 
+@interface OEDBGame ()
+@property(nullable) OEDownload *romDownload;
+@end
+
 @implementation OEDBGame
-@dynamic name, gameTitle, rating, gameDescription, importDate, lastInfoSync, status, displayName;
-@dynamic boxImage, system, roms, genres, collections, credits;
+@synthesize romDownload=_romDownload;
+@dynamic displayName;
 
 + (void)initialize
 {
@@ -63,31 +68,31 @@ NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
 
 #pragma mark - Creating and Obtaining OEDBGames
 
-+ (id)createGameWithName:(NSString *)name andSystem:(OEDBSystem *)system inDatabase:(OELibraryDatabase *)database
++ (instancetype)createGameWithName:(NSString *)name andSystem:(OEDBSystem *)system inDatabase:(OELibraryDatabase *)database
 {
-    NSManagedObjectContext *context = [database mainThreadContext];
+    NSManagedObjectContext *context = database.mainThreadContext;
 
     __block OEDBGame *game = nil;
     [context performBlockAndWait:^{
         NSEntityDescription *description = [NSEntityDescription entityForName:@"Game" inManagedObjectContext:context];
         game = [[OEDBGame alloc] initWithEntity:description insertIntoManagedObjectContext:context];
 
-        [game setName:name];
-        [game setImportDate:[NSDate date]];
-        [game setSystem:system];
+        game.name = name;
+        game.importDate = [NSDate date];
+        game.system = system;
     }];
     
     return game;
 }
 
 // returns the game from the default database that represents the file at url
-+ (id)gameWithURL:(NSURL *)url error:(NSError *__autoreleasing*)outError
++ (instancetype)gameWithURL:(nullable NSURL *)url error:(NSError *__autoreleasing*)outError
 {
     return [self gameWithURL:url inDatabase:[OELibraryDatabase defaultDatabase] error:outError];
 }
 
 // returns the game from the specified database that represents the file at url
-+ (id)gameWithURL:(NSURL *)url inDatabase:(OELibraryDatabase *)database error:(NSError *__autoreleasing*)outError
++ (instancetype _Nullable)gameWithURL:(nullable NSURL *)url inDatabase:(OELibraryDatabase *)database error:(NSError **)outError
 {
     if(url == nil)
     {
@@ -97,16 +102,17 @@ NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
     
     NSError __autoreleasing *nilerr;
     if(outError == NULL) outError = &nilerr;
-    
+
+    url = url.URLByStandardizingPath;
     BOOL urlReachable = [url checkResourceIsReachableAndReturnError:outError];
 
     // TODO: FIX
     OEDBGame *game = nil;
-    NSManagedObjectContext *context = [database mainThreadContext];
+    NSManagedObjectContext *context = database.mainThreadContext;
     OEDBRom *rom = [OEDBRom romWithURL:url inContext:context error:outError];
     if(rom != nil)
     {
-        game = [rom game];
+        game = rom.game;
     }
     
     NSString *md5 = nil, *crc = nil;
@@ -115,234 +121,236 @@ NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
     {
         [defaultFileManager hashFileAtURL:url md5:&md5 crc32:&crc error:outError];
         OEDBRom *rom = [OEDBRom romWithMD5HashString:md5 inContext:context error:outError];
-        if(!rom) rom = [OEDBRom romWithCRC32HashString:crc inContext:context error:outError];
-        if(rom) game = [rom game];
+        if(rom) game = rom.game;
     }
     
     if(!urlReachable)
-        [game setStatus:[NSNumber numberWithInt:OEDBGameStatusAlert]];
+        game.status = @(OEDBGameStatusAlert);
 
     return game;
 }
 
 
 #pragma mark - Cover Art Database Sync / Info Lookup
+
 - (void)requestCoverDownload
 {
-    [self setStatus:[NSNumber numberWithInt:OEDBGameStatusProcessing]];
-    [self save];
-    [[self libraryDatabase] startOpenVGDBSync];
+    if([self.status isEqualTo:@(OEDBGameStatusAlert)] || [self.status isEqualTo:@(OEDBGameStatusOK)])
+    {
+        self.status = @(OEDBGameStatusProcessing);
+        [self save];
+        [self.libraryDatabase startOpenVGDBSync];
+    }
 }
 
 - (void)cancelCoverDownload
 {
-    [self setStatus:[NSNumber numberWithInt:OEDBGameStatusOK]];
-    [self save];
+    if([self.status isEqualTo:@(OEDBGameStatusProcessing)])
+    {
+        self.status = @(OEDBGameStatusOK);
+        [self save];
+    }
 }
 
 - (void)requestInfoSync
 {
-    [self setStatus:[NSNumber numberWithInt:OEDBGameStatusProcessing]];
+    if([self.status isEqualTo:@(OEDBGameStatusAlert)] || [self.status isEqualTo:@(OEDBGameStatusOK)])
+    {
+        self.status = @(OEDBGameStatusProcessing);
+        [self save];
+        [self.libraryDatabase startOpenVGDBSync];
+    }
+}
+
+#pragma mark - ROM Downloading
+
+- (void)requestROMDownload
+{
+    if(_romDownload != nil) return;
+    self.status = @(OEDBGameStatusDownloading);
+
+    OEDBRom *rom = self.defaultROM;
+    NSString *source = rom.source;
+    if(source == nil || [source length] == 0)
+    {
+        DLog(@"Invalid URL to download!");
+        return;
+    }
+
+    NSURL *url = [NSURL URLWithString:source];
+    if(url == nil)
+    {
+        DLog(@"Invalid URL to download!");
+        return;
+    }
+
+    __block __strong OEDBGame *blockSelf = self; // We don't want to be deallocated while the download is still running
+    _romDownload = [[OEDownload alloc] initWithURL:url];
+    _romDownload.completionHandler = ^(NSURL *url, NSError *error) {
+        if(!url || error)
+        {
+            DLog(@"ROM download Failed!");
+            DLog(@"%@", error);
+        }
+        else
+        {
+            DLog(@"Downloaded to %@", url);
+            rom.URL = url;
+            NSError *err = nil;
+            if(![rom consolidateFilesWithError:&err])
+            {
+                DLog(@"%@", err);
+                rom.URL = nil;
+            }
+            [rom save];
+        }
+
+        blockSelf.status = @(OEDBGameStatusOK);
+        blockSelf.romDownload = nil;
+        [blockSelf save];
+    };
+    [_romDownload startDownload];
+}
+
+- (void)cancelROMDownload
+{
+    [_romDownload cancelDownload];
+    _romDownload = nil;
+    self.status = @(OEDBGameStatusOK);
     [self save];
-    [[self libraryDatabase] startOpenVGDBSync];
-}
-
-- (void)performInfoSync
-{
-    __block NSMutableDictionary *result = nil;
-    __block NSError *error = nil;
-
-    NSString * const boxImageURLKey = @"boxImageURL";
-
-    OEDBRom *rom = [[self roms] anyObject];
-    result = [[[OEGameInfoHelper sharedHelper] gameInfoForROM:rom error:&error] mutableCopy];
-
-    if(result != nil && [result objectForKey:boxImageURLKey] != nil)
-    {
-        NSString *normalizedURL = [[result objectForKey:boxImageURLKey] stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
-        NSURL   *url = [NSURL URLWithString:normalizedURL];
-        [self setBoxImageByURL:url];
-
-        [result removeObjectForKey:boxImageURLKey];
-    }
-
-    if(result != nil)
-    {
-        [self setValuesForKeysWithDictionary:result];
-        [self setLastInfoSync:[NSDate date]];
-    }
-    [self setStatus:@(OEDBGameStatusOK)];
-}
-
-#pragma mark -
-
-- (id)mergeInfoFromGame:(OEDBGame *)game
-{
-    // TODO: (low priority): improve merging
-    // we could merge with priority based on last info sync for example
-    if([self name] == nil)
-        [self setName:[game name]];
-    
-    if([self gameTitle] == nil)
-        [self setGameTitle:[game gameTitle]];
-	
-    if([self gameDescription] == nil)
-        [self setGameDescription:[game gameDescription]];
-    
-    if([self lastInfoSync] == nil)
-        [self setLastInfoSync:[game lastInfoSync]];
-	
-    if([self importDate] == nil)
-        [self setImportDate:[game importDate]];
-    
-    if([self rating] == nil)
-        [self setRating:[game rating]];
-    
-    if([self boxImage] == nil)
-        [self setBoxImage:[game boxImage]];
-    
-    NSMutableSet *ownCollections = [self mutableCollections];
-    NSSet *gameCollections = [game collections];
-    [ownCollections unionSet:gameCollections];
-    
-    NSMutableSet *ownCredits = [self mutableCredits];
-    NSSet *gameCredits = [game credits];
-    [ownCredits unionSet:gameCredits];
-    
-    NSMutableSet *ownRoms = [self mutableRoms];
-    NSSet *gameRoms = [game roms];
-    [ownRoms unionSet:gameRoms];
-    
-    NSMutableSet *ownGenres = [self mutableGenres];
-    NSSet *gameGenres = [game genres];
-    [ownGenres unionSet:gameGenres];
-    
-    return self;
 }
 
 #pragma mark - Accessors
-
 - (NSDate *)lastPlayed
 {
-    NSArray *roms = [[self roms] allObjects];
+    NSArray <OEDBRom *> *roms = self.roms.allObjects;
     
-    NSArray *sortedByLastPlayed =
+    NSArray <OEDBRom *> *sortedByLastPlayed =
     [roms sortedArrayUsingComparator:
-     ^ NSComparisonResult (id obj1, id obj2)
+     ^ NSComparisonResult (OEDBRom *obj1, OEDBRom *obj2)
      {
-         return [[obj1 lastPlayed] compare:[obj2 lastPlayed]];
+         return [obj1.lastPlayed compare:obj2.lastPlayed];
      }];
     
-    return [[sortedByLastPlayed lastObject] lastPlayed];
+    return sortedByLastPlayed.lastObject.lastPlayed;
 }
 
 - (OEDBSaveState *)autosaveForLastPlayedRom
 {
-    NSArray *roms = [[self roms] allObjects];
+    NSArray <OEDBRom *> *roms = self.roms.allObjects;
     
-    NSArray *sortedByLastPlayed =
+    NSArray <OEDBRom *> *sortedByLastPlayed =
     [roms sortedArrayUsingComparator:
-     ^ NSComparisonResult (id obj1, id obj2)
+     ^ NSComparisonResult (OEDBRom *obj1, OEDBRom *obj2)
      {
-         return [[obj1 lastPlayed] compare:[obj2 lastPlayed]];
+         return [obj1.lastPlayed compare:obj2.lastPlayed];
      }];
 	
-    return [[sortedByLastPlayed lastObject] autosaveState];
+    return sortedByLastPlayed.lastObject.autosaveState;
 }
 
 - (NSNumber *)saveStateCount
 {
     NSUInteger count = 0;
-    for(OEDBRom *rom in [self roms]) count += [rom saveStateCount];
+    for(OEDBRom *rom in self.roms) count += rom.saveStateCount;
     return @(count);
 }
 
 - (OEDBRom *)defaultROM
 {
-    NSSet *roms = [self roms];
     // TODO: if multiple roms are available we should select one based on version/revision and language
-    
-    return [roms anyObject];
+    return self.roms.anyObject;
 }
 
 - (NSNumber *)playCount
 {
     NSUInteger count = 0;
-    for(OEDBRom *rom in [self roms]) count += [[rom playCount] unsignedIntegerValue];
+    for(OEDBRom *rom in self.roms) count += [rom.playCount unsignedIntegerValue];
     return @(count);
 }
 
 - (NSNumber *)playTime
 {
     NSTimeInterval time = 0;
-    for(OEDBRom *rom in [self roms]) time += [[rom playTime] doubleValue];
+    for(OEDBRom *rom in self.roms) time += [rom.playTime doubleValue];
     return @(time);
 }
 
 - (BOOL)filesAvailable
 {
-    __block BOOL result = YES;
-    [[self roms] enumerateObjectsUsingBlock:^(OEDBRom *rom, BOOL *stop) {
-        if(![rom filesAvailable])
+    BOOL result = YES;
+    for(OEDBRom *rom in self.roms)
+    {
+        if(!rom.filesAvailable)
         {
-            result = NO;
-            *stop = YES;
+            result = YES;
+            break;
         }
-    }];
-    
+    }
+
+    if([self.status isEqualTo:@(OEDBGameStatusDownloading)] || [self.status isEqualTo:@(OEDBGameStatusProcessing)])
+       return result;
+
     if(!result)
-       [self setStatus:[NSNumber numberWithInt:OEDBGameStatusAlert]];
-    else if([[self status] intValue] == OEDBGameStatusAlert)
-        [self setStatus:[NSNumber numberWithInt:OEDBGameStatusOK]];
+       self.status = @(OEDBGameStatusAlert);
+    else if([self.status intValue] == OEDBGameStatusAlert)
+        self.status = @(OEDBGameStatusOK);
     
     return result;
 }
 
 #pragma mark -
+
 - (void)setBoxImageByImage:(NSImage *)img
 {
-    OEBitmapImageFileType type = [[NSUserDefaults standardUserDefaults] integerForKey:OEGameArtworkFormatKey];
-    OEDBImage *image = [OEDBImage createImageWithNSImage:img type:type inContext:[self managedObjectContext]];
-    OEDBImage *currentImage = [self boxImage];
-    if(currentImage != nil)
-        [currentImage delete];
-    [self setBoxImage:image];
-    [self save];
+    NSDictionary *dictionary = [OEDBImage prepareImageWithNSImage:img];
+    NSManagedObjectContext *context = self.managedObjectContext;
+    [context performBlockAndWait:^{
+        OEDBImage *currentImage = self.boxImage;
+        if(currentImage) [context deleteObject:currentImage];
+
+        OEDBImage *newImage = [OEDBImage createImageWithDictionary:dictionary];
+        if(newImage) self.boxImage = newImage;
+        else [context deleteObject:newImage];
+    }];
 }
 
 - (void)setBoxImageByURL:(NSURL *)url
 {
-    OEDBImage *image = [OEDBImage createImageWithURL:url type:OEBitmapImageFileTypeDefault inContext:[self managedObjectContext]];
-    OEDBImage *currentImage = [self boxImage];
-    if(currentImage != nil)
-        [currentImage delete];
+    url = url.URLByStandardizingPath;
+    NSString *urlString = url.absoluteString;
 
-    [self setBoxImage:image];
-    [self save];
+    NSDictionary *dictionary = [OEDBImage prepareImageWithURLString:urlString];
+    NSManagedObjectContext *context = self.managedObjectContext;
+    [context performBlockAndWait:^{
+        OEDBImage *currentImage = self.boxImage;
+        if(currentImage) [context deleteObject:currentImage];
+
+        OEDBImage *newImage = [OEDBImage createImageWithDictionary:dictionary];
+        if(newImage) self.boxImage = newImage;
+        else [context deleteObject:newImage];
+    }];
 }
 
 #pragma mark - Core Data utilities
-- (void)deleteByMovingFile:(BOOL)moveToTrash keepSaveStates:(BOOL)statesFlag
+
+- (void)awakeFromFetch
 {
-    [self deleteByMovingFile:moveToTrash keepSaveStates:statesFlag save:YES];
+    if([self.status isEqualTo:@(OEDBGameStatusDownloading)])
+        self.status = @(OEDBGameStatusOK);
 }
 
-- (void)deleteByMovingFile:(BOOL)moveToTrash keepSaveStates:(BOOL)statesFlag save:(BOOL)saveFlag
+- (void)deleteByMovingFile:(BOOL)moveToTrash keepSaveStates:(BOOL)statesFlag
 {
-    NSManagedObjectContext *context = [self managedObjectContext];
-    [context performBlockAndWait:^{
-         NSMutableSet *mutableRoms = [self mutableRoms];
-         while ([mutableRoms count])
-         {
-             OEDBRom *aRom = [mutableRoms anyObject];
-             [aRom deleteByMovingFile:moveToTrash keepSaveStates:statesFlag];
-             [mutableRoms removeObject:aRom];
-         }
-        
-        [context deleteObject:self];
-        if(saveFlag)
-            [context save:nil];
-    }];
+    NSMutableSet <OEDBRom *> *mutableRoms = self.mutableRoms;
+    while (mutableRoms.count > 0)
+    {
+        OEDBRom *aRom = mutableRoms.anyObject;
+        [aRom deleteByMovingFile:moveToTrash keepSaveStates:statesFlag];
+        [mutableRoms removeObject:aRom];
+    }
+    self.roms = [NSSet set];
+    [self.managedObjectContext deleteObject:self];
 }
 
 + (NSString *)entityName
@@ -352,55 +360,49 @@ NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
 
 + (NSEntityDescription *)entityDescriptionInContext:(NSManagedObjectContext *)context
 {
-    return [NSEntityDescription entityForName:[self entityName] inManagedObjectContext:context];
+    return [NSEntityDescription entityForName:self.entityName inManagedObjectContext:context];
+}
+
+- (void)prepareForDeletion
+{
+    [self.boxImage delete];
+
+    [_romDownload cancelDownload];
+    _romDownload = nil;
 }
 
 #pragma mark - NSPasteboardWriting
-// TODO: fix pasteboard writing
+
 - (NSArray *)writableTypesForPasteboard:(NSPasteboard *)pasteboard
 {
-    return [NSArray arrayWithObjects:(NSString *)kPasteboardTypeFileURLPromise, OEPasteboardTypeGame, /* NSPasteboardTypeTIFF,*/ nil];
+    return @[ OEPasteboardTypeGame, (NSString *)kUTTypeFileURL ];
 }
 
-- (NSPasteboardWritingOptions)writingOptionsForType:(NSString *)type pasteboard:(NSPasteboard *)pasteboard
+- (nullable id)pasteboardPropertyListForType:(NSString *)type
 {
-    if(type ==(NSString *)kPasteboardTypeFileURLPromise)
-        return NSPasteboardWritingPromised;
-    
-    return 0;
-}
-
-- (id)pasteboardPropertyListForType:(NSString *)type
-{
-    if(type == (NSString *)kPasteboardTypeFileURLPromise)
+    if(type == OEPasteboardTypeGame)
     {
-        NSSet *roms = [self roms];
-        NSMutableArray *paths = [NSMutableArray arrayWithCapacity:[roms count]];
-        for(OEDBRom *aRom in roms)
-        {
-            NSString *urlString = [[aRom URL] absoluteString];
-            [paths addObject:urlString];
-        }
-        return paths;
-    } 
-    else if(type == OEPasteboardTypeGame)
-    {
-        return [[self permanentIDURI] absoluteString];
+        return self.permanentIDURI.absoluteString;
     }
-    
-    // TODO: return appropriate obj
+    else if([type isEqualToString:(NSString *)kUTTypeFileURL])
+    {
+        OEDBRom *rom = self.defaultROM;
+        NSURL *url = rom.URL.absoluteURL;
+        return [url pasteboardPropertyListForType:(NSString *)kUTTypeFileURL];
+    }
+
     DLog(@"Unkown type %@", type);
     return nil;
 }
 
 #pragma mark - NSPasteboardReading
 
-- (id)initWithPasteboardPropertyList:(id)propertyList ofType:(NSString *)type
+- (nullable id)initWithPasteboardPropertyList:(id)propertyList ofType:(NSString *)type
 {
     if(type == OEPasteboardTypeGame)
     {
         OELibraryDatabase *database = [OELibraryDatabase defaultDatabase];
-        NSManagedObjectContext *context = [database mainThreadContext];
+        NSManagedObjectContext *context = database.mainThreadContext;
         NSURL    *uri  = [NSURL URLWithString:propertyList];
         return (self = [OEDBGame objectWithURI:uri inContext:context]);
     } 
@@ -409,7 +411,7 @@ NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
 
 + (NSArray *)readableTypesForPasteboard:(NSPasteboard *)pasteboard
 {
-    return [NSArray arrayWithObjects:OEPasteboardTypeGame, nil];
+    return @[ OEPasteboardTypeGame ];
 }
 
 + (NSPasteboardReadingOptions)readingOptionsForType:(NSString *)type pasteboard:(NSPasteboard *)pasteboard
@@ -419,44 +421,51 @@ NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
 
 #pragma mark - Data Model Relationships
 
-- (NSMutableSet *)mutableRoms
+- (nullable NSMutableSet <OEDBRom *> *)mutableRoms
 {
     return [self mutableSetValueForKey:@"roms"];
 }
 
-- (NSMutableSet *)mutableGenres
+- (nullable NSMutableSet <NSManagedObject *> *)mutableGenres
 {
     return [self mutableSetValueForKey:@"genres"];
 }
-- (NSMutableSet *)mutableCollections
+
+- (nullable NSMutableSet <OEDBCollection *> *)mutableCollections
 {
     return [self mutableSetValueForKeyPath:@"collections"];
 }
-- (NSMutableSet *)mutableCredits
+
+- (nullable NSMutableSet <NSManagedObject *> *)mutableCredits
 {
     return [self mutableSetValueForKeyPath:@"credits"];
 }
 
-- (NSString *)displayName
+- (nullable NSString *)displayName
 {
     if([[NSUserDefaults standardUserDefaults] boolForKey:OEDisplayGameTitle])
-        return ([self gameTitle] != nil ? [self gameTitle] : [self name]);
+        return (self.gameTitle != nil ? self.gameTitle : self.name);
     else
-        return [self name];
+        return self.name;
 }
 
-- (void)setDisplayName:(NSString *)displayName
+- (void)setDisplayName:(nullable NSString *)displayName
 {
     if([[NSUserDefaults standardUserDefaults] boolForKey:OEDisplayGameTitle])
-        ([self gameTitle] != nil ? [self setGameTitle:displayName] : [self setName:displayName]);
+    {
+        if(self.gameTitle != nil)
+            self.gameTitle = displayName;
+        else
+            self.name = displayName;
+    }
     else
-        [self setName:displayName];
+        self.name = displayName;
 }
 
-- (NSString *)cleanDisplayName
+- (nullable NSString *)cleanDisplayName
 {
-    NSString *displayName = [self displayName];
-    NSDictionary *articlesDictionary = @{
+    NSString *displayName = self.displayName;
+    NSDictionary <NSString *, NSString *> *articlesDictionary = @{
                                  @"A "   : @"2",
                                  @"An "  : @"3",
                                  @"Das " : @"4",
@@ -476,7 +485,7 @@ NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
     for (id key in articlesDictionary) {
         if([displayName hasPrefix:key])
         {
-            return [displayName substringFromIndex:[articlesDictionary[key] integerValue]];
+            return [displayName substringFromIndex:articlesDictionary[key].integerValue];
         }
         
     }
@@ -496,18 +505,18 @@ NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
     NSString *subPrefix = [prefix stringByAppendingString:@"-----"];
     NSLog(@"%@ Beginning of game dump", prefix);
 
-    NSLog(@"%@ Game name is %@", prefix, [self name]);
-    NSLog(@"%@ title is %@", prefix, [self gameTitle]);
-    NSLog(@"%@ rating is %@", prefix, [self rating]);
-    NSLog(@"%@ description is %@", prefix, [self gameDescription]);
-    NSLog(@"%@ import date is %@", prefix, [self importDate]);
-    NSLog(@"%@ last info sync is %@", prefix, [self lastInfoSync]);
-    NSLog(@"%@ last played is %@", prefix, [self lastPlayed]);
-    NSLog(@"%@ status is %@", prefix, [self status]);
+    NSLog(@"%@ Game name is %@", prefix, self.name);
+    NSLog(@"%@ title is %@", prefix, self.gameTitle);
+    NSLog(@"%@ rating is %@", prefix, self.rating);
+    NSLog(@"%@ description is %@", prefix, self.gameDescription);
+    NSLog(@"%@ import date is %@", prefix, self.importDate);
+    NSLog(@"%@ last info sync is %@", prefix, self.lastInfoSync);
+    NSLog(@"%@ last played is %@", prefix, self.lastPlayed);
+    NSLog(@"%@ status is %@", prefix, self.status);
 
-    NSLog(@"%@ Number of ROMs for this game is %lu", prefix, (unsigned long)[[self roms] count]);
+    NSLog(@"%@ Number of ROMs for this game is %lu", prefix, (unsigned long)self.roms.count);
 
-    for(id rom in [self roms])
+    for(id rom in self.roms)
     {
         if([rom respondsToSelector:@selector(dumpWithPrefix:)]) [rom dumpWithPrefix:subPrefix];
         else NSLog(@"%@ ROM is %@", subPrefix, rom);
@@ -517,3 +526,5 @@ NSString *const OEGameArtworkPropertiesKey = @"artworkProperties";
 }
 
 @end
+
+NS_ASSUME_NONNULL_END

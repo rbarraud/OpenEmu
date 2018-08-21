@@ -293,6 +293,41 @@
 		<key>OEGCButtonStart</key>
 		<string>OEControllerAdaptoidN64ButtonStart</string>
 	</dict>
+	<key>OEControllerNintendoWiiUProController</key>
+	<dict>
+		<key>OEGCButtonUp</key>
+		<string>OEControllerNintendoWiiUProControllerDPadUp</string>
+		<key>OEGCButtonDown</key>
+		<string>OEControllerNintendoWiiUProControllerDPadDown</string>
+		<key>OEGCButtonLeft</key>
+		<string>OEControllerNintendoWiiUProControllerDPadLeft</string>
+		<key>OEGCButtonRight</key>
+		<string>OEControllerNintendoWiiUProControllerDPadRight</string>
+		<key>OEGCAnalogUp</key>
+		<string>OEControllerNintendoWiiUProControllerLeftAnalogUp</string>
+		<key>OEGCAnalogLeft</key>
+		<string>OEControllerNintendoWiiUProControllerLeftAnalogLeft</string>
+		<key>OEGCAnalogCUp</key>
+		<string>OEControllerNintendoWiiUProControllerRightAnalogUp</string>
+		<key>OEGCAnalogCLeft</key>
+		<string>OEControllerNintendoWiiUProControllerRightAnalogLeft</string>
+		<key>OEGCButtonA</key>
+		<string>OEControllerNintendoWiiUProControllerButtonA</string>
+		<key>OEGCButtonB</key>
+		<string>OEControllerNintendoWiiUProControllerButtonB</string>
+		<key>OEGCButtonX</key>
+		<string>OEControllerNintendoWiiUProControllerButtonX</string>
+		<key>OEGCButtonY</key>
+		<string>OEControllerNintendoWiiUProControllerButtonY</string>
+		<key>OEGCButtonL</key>
+		<string>OEControllerNintendoWiiUProControllerButtonZL</string>
+		<key>OEGCButtonR</key>
+		<string>OEControllerNintendoWiiUProControllerButtonZR</string>
+		<key>OEGCButtonZ</key>
+		<string>OEControllerNintendoWiiUProControllerButtonR</string>
+		<key>OEGCButtonStart</key>
+		<string>OEControllerNintendoWiiUProControllerButtonPlus</string>
+	</dict>
 	<key>OEControllerSonyPS4Dualshock4</key>
 	<dict>
 		<key>OEGCButtonUp</key>
@@ -321,6 +356,70 @@
 		<string>OEControllerSonyPS4Dualshock4ButtonR1</string>
 		<key>OEGCButtonStart</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonOptions</string>
+	</dict>
+	<key>OEControllerGCExtendedGamepadProfile</key>
+	<dict>
+		<key>OEGCButtonUp</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadUp</string>
+		<key>OEGCButtonDown</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadDown</string>
+		<key>OEGCButtonLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadLeft</string>
+		<key>OEGCButtonRight</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadRight</string>
+		<key>OEGCAnalogUp</key>
+		<string>OEControllerGCExtendedGamepadProfileLeftAnalogUp</string>
+		<key>OEGCAnalogLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileLeftAnalogLeft</string>
+		<key>OEGCAnalogCUp</key>
+		<string>OEControllerGCExtendedGamepadProfileRightAnalogUp</string>
+		<key>OEGCAnalogCLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileRightAnalogLeft</string>
+		<key>OEGCButtonB</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonB</string>
+		<key>OEGCButtonX</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonA</string>
+		<key>OEGCButtonA</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonY</string>
+		<key>OEGCButtonY</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonX</string>
+		<key>OEGCButtonL</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL2</string>
+		<key>OEGCButtonR</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonR2</string>
+		<key>OEGCButtonZ</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonR1</string>
+		<key>OEGCButtonStart</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonHome</string>
+	</dict>
+	<key>OEControllerNintendoSwitchProController</key>
+	<dict>
+		<key>OEGCButtonUp</key>
+		<string>OEControllerNintendoSwitchProControllerDPadUp</string>
+		<key>OEGCAnalogUp</key>
+		<string>OEControllerNintendoSwitchProControllerLeftAnalogUp</string>
+		<key>OEGCAnalogLeft</key>
+		<string>OEControllerNintendoSwitchProControllerLeftAnalogLeft</string>
+		<key>OEGCAnalogCUp</key>
+		<string>OEControllerNintendoSwitchProControllerRightAnalogUp</string>
+		<key>OEGCAnalogCLeft</key>
+		<string>OEControllerNintendoSwitchProControllerRightAnalogLeft</string>
+		<key>OEGCButtonA</key>
+		<string>OEControllerNintendoSwitchProControllerButtonA</string>
+		<key>OEGCButtonB</key>
+		<string>OEControllerNintendoSwitchProControllerButtonB</string>
+		<key>OEGCButtonX</key>
+		<string>OEControllerNintendoSwitchProControllerButtonX</string>
+		<key>OEGCButtonY</key>
+		<string>OEControllerNintendoSwitchProControllerButtonY</string>
+		<key>OEGCButtonL</key>
+		<string>OEControllerNintendoSwitchProControllerButtonZL</string>
+		<key>OEGCButtonR</key>
+		<string>OEControllerNintendoSwitchProControllerButtonZR</string>
+		<key>OEGCButtonZ</key>
+		<string>OEControllerNintendoSwitchProControllerButtonR</string>
+		<key>OEGCButtonStart</key>
+		<string>OEControllerNintendoSwitchProControllerButtonPlus</string>
 	</dict>
 </dict>
 </plist>

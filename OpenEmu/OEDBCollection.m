@@ -1,5 +1,5 @@
 /*
- Copyright (c) 2011, OpenEmu Team
+ Copyright (c) 2015, OpenEmu Team
  
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -25,6 +25,9 @@
  */
 
 #import "OEDBCollection.h"
+#import "OETheme.h"
+
+NS_ASSUME_NONNULL_BEGIN
 
 @implementation OEDBCollection
 
@@ -32,17 +35,104 @@
 {
     return @"Collection";
 }
-#pragma mark -
-#pragma mark Data Model Properties
+
+#pragma mark - Data Model Properties
+
 @dynamic name;
 
-#pragma mark -
-#pragma mark Data Model Relationships
+#pragma mark - Data Model Relationships
+
 @dynamic games;
 
-- (NSMutableSet*)mutableGames;
+- (nullable NSMutableSet <OEDBGame *> *)mutableGames;
 {
     return [self mutableSetValueForKeyPath:@"games"];
 }
 
+#pragma mark - Sidebar Item Protocol
+
+- (NSString *)viewControllerClassName
+{
+    return @"OEGameCollectionViewController";
+}
+
+- (NSString *)sidebarID
+{
+    return self.permanentIDURI.absoluteString;
+}
+
+- (NSImage *)sidebarIcon
+{
+    return [[OETheme sharedTheme] imageForKey:@"collections_simple" forState:OEThemeStateDefault];
+}
+
+- (nullable NSString *)sidebarName
+{
+    return [self valueForKey:@"name"];
+}
+
+- (void)setSidebarName:(nullable NSString *)newName
+{
+    [self setValue:newName forKey:@"name"];
+}
+
+- (BOOL)isSelectableInSidebar
+{
+    return YES;
+}
+
+- (BOOL)isEditableInSidebar
+{
+    return YES;
+}
+
+- (BOOL)isGroupHeaderInSidebar
+{
+    return NO;
+}
+
+- (BOOL)hasSubCollections
+{
+    return NO;
+}
+
+#pragma mark - OEGameCollectionView item
+
+- (nullable NSString *)collectionViewName
+{
+    return [self valueForKey:@"name"];
+}
+
+- (BOOL)isCollectionEditable
+{
+    return YES;
+}
+
+- (NSArray * _Nullable)items
+{
+    return nil;
+}
+
+- (NSPredicate *)fetchPredicate
+{
+    return [NSPredicate predicateWithFormat:@"ANY collections == %@", self];
+}
+
+- (NSInteger)fetchLimit
+{
+    return 0;
+}
+
+- (NSArray <NSSortDescriptor *> *)fetchSortDescriptors
+{
+    return @[];
+}
+
+- (BOOL)shouldShowSystemColumnInListView
+{
+    return YES;
+}
+
 @end
+
+NS_ASSUME_NONNULL_END

@@ -24,46 +24,53 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
-#import <Quartz/Quartz.h>
-#import <OpenGL/OpenGL.h>
-
-#import <Syphon/Syphon.h>
-#import <OpenEmuBase/OpenEmuBase.h>
-
+@import Cocoa;
 #import "OEGameCoreHelper.h"
-
-@protocol OEGameViewDelegate;
-@class OESystemResponder;
+@class SyphonServer;
 
 extern NSString * const OEScreenshotAspectRationCorrectionDisabled;
-@interface OEGameView : NSOpenGLView <OEGameCoreDisplayHelper>
+extern NSString * const OEDefaultVideoFilterKey;
 
-@property(nonatomic, assign) id<OEGameViewDelegate> delegate;
+@protocol OEGameViewDelegate;
 
-// QC based filters
-@property(copy) NSDictionary *filters;
-@property(nonatomic, copy) NSString *filterName;
-@property(nonatomic, copy) NSString *gameTitle;
-@property(nonatomic, copy) NSColor  *backgroundColor;
-// Screenshots
+@interface OEGameView : NSOpenGLView
+
+@property (nonatomic, weak) id<OEGameViewDelegate> delegate;
+
+@property (copy) NSDictionary *filters;
+@property (nonatomic, copy) NSString *filterName;
+@property (nonatomic, copy) NSColor  *backgroundColor;
+
 /* Returns a screenshot containing the game viewport with its current size in the window and filters */
 - (NSImage *)screenshot;
 
 /* Returns a screenshot as rendered by the emulator core: native size and no filters */
 - (NSImage *)nativeScreenshot;
 
-// Rendering methods
-- (void)setupDisplayLink;
-- (void)tearDownDisplayLink;
-- (CVReturn)displayLinkRenderCallback:(const CVTimeStamp *)timeStamp;
-- (void)render;
-
+- (void)setEnableVSync:(BOOL)enable;
+- (void)setAspectSize:(OEIntSize)newAspectSize;
+- (void)setScreenSize:(OEIntSize)newScreenSize withIOSurfaceID:(IOSurfaceID)newSurfaceID;
 - (void)setScreenSize:(OEIntSize)newScreenSize aspectSize:(OEIntSize)newAspectSize withIOSurfaceID:(IOSurfaceID)newSurfaceID;
+
+- (void)showQuickSaveNotification;
+- (void)showScreenShotNotification;
+- (void)showFastForwardNotification:(BOOL)enable;
+- (void)showRewindNotification:(BOOL)enable;
+- (void)showStepForwardNotification;
+- (void)showStepBackwardNotification;
+
+- (NSSize)correctScreenSize:(OEIntSize)screenSize forAspectSize:(OEIntSize)aspectSize returnVertices:(BOOL)flag;
 @end
+
+#ifdef SYPHON_SUPPORT
+// Syphon support
+@interface OEGameView ()
+@property (nonatomic, copy)  NSString *syphonTitle;
+@property (readonly, strong) SyphonServer *syphonServer;
+@end
+#endif
 
 @protocol OEGameViewDelegate <NSObject>
 - (NSString *)systemIdentifier;
-- (void)gameView:(OEGameView *)gameView setDrawSquarePixels:(BOOL)drawSquarePixels;
 - (void)gameView:(OEGameView *)gameView didReceiveMouseEvent:(OEEvent *)event;
 @end

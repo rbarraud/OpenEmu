@@ -25,12 +25,13 @@
  */
 
 #import "OEPrefLibraryController.h"
-#import "OEApplicationDelegate.h"
 #import "OELibraryDatabase.h"
-#import "OEDBSystem.h"
+#import "OEDBRom.h"
+#import "OEDBSystem+CoreDataProperties.h"
 #import "OESystemPlugin.h"
 #import "OECorePlugin.h"
 #import "OESidebarOutlineView.h"
+#import "OEROMImporter.h"
 
 #import "OEButton.h"
 #import "OEHUDAlert.h"
@@ -39,9 +40,12 @@
 #import "OEGameViewController.h"
 #import "OESidebarController.h"
 #import "OEHUDAlert+DefaultAlertsAdditions.h"
-#import "NSURL+OELibraryAdditions.h"
 
 #import "OEFileManager.h"
+
+#import "OpenEmu-Swift.h"
+
+NSString * const OELibraryLocationDidChangeNotificationName = @"OELibraryLocationDidChangeNotificationName";
 
 @implementation OEPrefLibraryController
 
@@ -49,8 +53,7 @@
 {
     if((self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil]))
     {
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(OE_rebuildAvailableLibraries) name:OEDBSystemsDidChangeNotification object:nil];
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(toggleSystem:) name:OESidebarTogglesSystemNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(OE_rebuildAvailableLibraries) name:OEDBSystemAvailabilityDidChangeNotification object:nil];
 
         [[OEPlugin class] addObserver:self forKeyPath:@"allPlugins" options:0 context:nil];
     }
@@ -99,7 +102,7 @@
 
 - (NSString *)localizedTitle
 {
-    return NSLocalizedString([self title], "");
+    return NSLocalizedString(@"Library", @"Preferences: Library Toolbar Item");
 }
 
 - (NSSize)viewSize
@@ -150,19 +153,18 @@
     NSArray *documents = [[NSDocumentController sharedDocumentController] documents];
     if([documents count] != 0 || [[library importer] status] == OEImporterStatusRunning)
     {
-        OEHUDAlert *alert = [OEHUDAlert alertWithMessageText:@"Please close all games and wait for the importer to finish." defaultButton:@"OK" alternateButton:nil];
+        OEHUDAlert *alert = [OEHUDAlert alertWithMessageText:NSLocalizedString(@"Please close all games and wait for the importer to finish.", @"") defaultButton:NSLocalizedString(@"OK", @"") alternateButton:nil];
         [alert runModal];
         return;
     }
     
     // TODO: stop sync thread!
     // TODO: use migratePersistentStore:toURL:options:withType:error so we don't have to restart the app
-    
     NSURL *currentLocation = [library databaseFolderURL];
     NSURL *newLocation     = [newParentLocation URLByAppendingPathComponent:[currentLocation lastPathComponent] isDirectory:YES];
     if([newLocation isSubpathOfURL:currentLocation])
     {
-        OEHUDAlert *alert = [OEHUDAlert alertWithMessageText:@"You can't move your library here!" defaultButton:@"OK" alternateButton:nil];
+        OEHUDAlert *alert = [OEHUDAlert alertWithMessageText:NSLocalizedString(@"You can't move your library here!", @"") defaultButton:NSLocalizedString(@"OK", @"") alternateButton:nil];
         [alert runModal];
         return;
     }
@@ -208,17 +210,18 @@
             
             [alert setShowsProgressbar:YES];
             [alert setProgress:0.0];
-            [alert setHeadlineText:NSLocalizedString(@"Copying Artwork Files…", @"")];
-            [alert setTitle:NSLocalizedString(@"", @"")];
+            [alert setHeadlineText:NSLocalizedString(@"Copying Artwork Files…", @"Alert Headline: Library migration")];
+            [alert setTitle:@""];
             [alert setShowsProgressbar:YES];
-            [alert setDefaultButtonTitle:@"Cancel"];
+            [alert setDefaultButtonTitle:NSLocalizedString(@"Cancel", @"")];
             [alert setMessageText:nil];
 
             dispatch_time_t popTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC));
             dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
             dispatch_after(popTime, queue, ^{
                 NSError *error = nil;
-                
+
+                NSManagedObjectContext *context = [[OELibraryDatabase defaultDatabase] writerContext];
                 // setup progress handler
                 [fm setProgressHandler:^BOOL(float progress){
                     // update progress
@@ -231,18 +234,25 @@
                 }];
                 
                 // Setup error handler
-                [fm setErrorHandler:^BOOL(NSURL *src, NSURL *dst, NSError *error){ DLog(@"OEFM Error handler called on %@", src); return NO; }];
+                [fm setErrorHandler:^BOOL(NSURL *src, NSURL *dst, NSError *error) {
+                    // ignore failing metafiles
+                    if([src.lastPathComponent rangeOfString:@"._"].location == 0) return true;
 
-                // Copy artwork directory
-                if(!(success=[fm copyItemAtURL:artworkURL toURL:newArtworkURL error:&error]))
+                    DLog(@"OEFM Error handler called on %@", src);
+                    
+                    return NO;
+                }];
+
+                // Copy artwork directory if it exists
+                if([artworkURL checkResourceIsReachableAndReturnError:nil] && !(success=[fm copyItemAtURL:artworkURL toURL:newArtworkURL error:&error]))
                 {
                     DLog(@"Failed to copy artwork");
-                    
+
                     // show error
                     [alert performBlockInModalSession:^{
                         [alert setShowsProgressbar:NO];
-                        [alert setMessageText:@"Copying artwork failed!"];
-                        [alert setDefaultButtonTitle:@"OK"];
+                        [alert setMessageText:NSLocalizedString(@"Copying artwork failed!", @"")];
+                        [alert setDefaultButtonTitle:NSLocalizedString(@"OK", @"")];
                     }];
                     
                     // clean up
@@ -256,12 +266,12 @@
                 // Copy roms directory
                 [alert performBlockInModalSession:^{
                     [alert setProgress:0.0];
-                    [alert setHeadlineText:NSLocalizedString(@"Copying ROM Files…", @"")];
-                    [alert setTitle:NSLocalizedString(@"", @"")];
+                    [alert setHeadlineText:NSLocalizedString(@"Copying ROM Files…", @"Alert Headline: Library migration")];
+                    [alert setTitle:@""];
                 }];
                 
                 __block NSInteger copiedCount = 0;
-                
+
                 // Setup callback to execute after each successfull copy
                 [fm setItemDoneHandler:^ BOOL (NSURL *src, NSURL *dst, NSError *error){
                    if(error == nil)
@@ -269,13 +279,10 @@
                        // change db entry for roms
                        if(![dst isDirectory])
                        {
-                           /*
-                           [alert performBlockInModalSession:^{
-                               [[OEDBRom romWithURL:src inDatabase:library error:nil] setURL:dst];
-                               TODO("Save HERE");
+                           [context performBlockAndWait:^{
+                               [[OEDBRom romWithURL:src inContext:context error:nil] setURL:dst];
                            }];
-                            */
-                           
+
                            // keep track of successfully copied roms
                            copiedCount++;
                        }
@@ -285,23 +292,23 @@
                    }
                    return YES;
                 }];
-                
-                if(!(success=[fm copyItemAtURL:currentRomsURL toURL:newRomsURL error:&error]))
+
+                // copy only if it exists
+                if([currentRomsURL checkResourceIsReachableAndReturnError:nil] && !(success=[fm copyItemAtURL:currentRomsURL toURL:newRomsURL error:&error]))
                 {
                     DLog(@"Failed to copy roms");
                     
                     // show error
                     [alert performBlockInModalSession:^{
                         [alert setShowsProgressbar:NO];
-                        [alert setMessageText:[NSString stringWithFormat:@"Could not move complete library! %ld roms were moved", copiedCount]];
-                        [alert setDefaultButtonTitle:@"OK"];
+                        [alert setMessageText:[NSString stringWithFormat:NSLocalizedString(@"Could not move complete library! %ld roms were moved", @""), copiedCount]];
+                        [alert setDefaultButtonTitle:NSLocalizedString(@"OK",@"")];
                     }];
                     
                     return;
                 }
                 
-                [alert performBlockInModalSession:^{
-                    NSManagedObjectContext *context = [library makeChildContext];
+                [context performBlockAndWait:^{
                     // make copied paths relative
                     NSArray        *fetchResult    = nil;
                     NSFetchRequest *fetchRequest   = [NSFetchRequest fetchRequestWithEntityName:[OEDBRom entityName]];
@@ -326,22 +333,27 @@
                     // note new rom folder loation in library
                     [[NSUserDefaults standardUserDefaults] setObject:[currentLocation path] forKey:OEDatabasePathKey];
                     [library setRomsFolderURL:currentRomsURL];
-                    [context save:nil];
+                    NSError *error = nil;
+                    [context save:&error];
                 }];
-                
+
+
                 // copy core data store over
-                [fm setItemDoneHandler:nil];
-                if(!(success=[fm copyItemAtURL:currentStoreURL toURL:newStoreURL error:&error]))
+                NSPersistentStoreCoordinator *coord = [context persistentStoreCoordinator];
+                NSPersistentStore *store = [coord persistentStoreForURL:currentStoreURL];
+                store = [coord migratePersistentStore:store toURL:newStoreURL options:nil withType:NSSQLiteStoreType error:&error];
+                if(!store || error)
                 {
                     DLog(@"failed copy store data");
                     
                     // show error
                     [alert performBlockInModalSession:^{
-                        NSManagedObjectContext *context = [library makeChildContext];
                         [alert setShowsProgressbar:NO];
-                        [alert setMessageText:@"Could not move library data!"];
-                        [alert setDefaultButtonTitle:@"OK"];
-                        
+                        [alert setMessageText:NSLocalizedString(@"Could not move library data!", @"")];
+                        [alert setDefaultButtonTitle:NSLocalizedString(@"OK",@"")];
+                    }];
+
+                    [context performBlockAndWait:^{
                         // restore previous paths
                         [[NSUserDefaults standardUserDefaults] setObject:[currentLocation path] forKey:OEDatabasePathKey];
                         [library setRomsFolderURL:currentRomsURL];
@@ -370,19 +382,33 @@
                 }
                 else
                 {
-                    DLog(@"Done, removing originals...");
+                    [coord removePersistentStore:store error:nil];
+                    [coord addPersistentStoreWithType:[store type] configuration:nil URL:[store URL] options:0 error:nil];
+
+                    // Make sure to post notification on main thread!
+                    void (^postNotification)(void) = ^(){
+                        [[OELibraryDatabase defaultDatabase] setPersistentStoreCoordinator:coord];
+                        [[NSNotificationCenter defaultCenter] postNotificationName:OELibraryLocationDidChangeNotificationName object:self userInfo:nil];
+                    };
+                    dispatch_async(dispatch_get_main_queue(), postNotification);
+                    [context save:nil];
 
                     // remove original
                     [fm removeItemAtURL:currentStoreURL error:nil];
-                    
+
+                    // remove artwork directory
+                    [fm removeItemAtURL:artworkURL error:nil];
+
                     // remove 'other files'
                     [fm removeItemAtURL:[currentLocation URLByAppendingPathComponent:[NSString stringWithFormat:@"%@%@", OEDatabaseFileName, @"-shm"]] error:nil];
                     [fm removeItemAtURL:[currentLocation URLByAppendingPathComponent:[NSString stringWithFormat:@"%@%@", OEDatabaseFileName, @"-wal"]] error:nil];
                 }
                 
                 success = success && alertResult==-1;
+
                 // TODO: cleanup old location by removing empty directories
-                [alert closeWithResult:NSAlertDefaultReturn];
+
+                [alert closeWithResult:NSAlertFirstButtonReturn];
             });
             alertResult = [alert runModal];
         }
@@ -392,16 +418,9 @@
     {
         // point openemu to new library location
         [[NSUserDefaults standardUserDefaults] setObject:[[newLocation path] stringByAbbreviatingWithTildeInPath] forKey:OEDatabasePathKey];
-        // sync because we are about to force exit
-        [[NSUserDefaults standardUserDefaults] synchronize];
-        
-        OEHUDAlert *alert = [OEHUDAlert alertWithMessageText:@"Your library was moved sucessfully. OpenEmu must relaunch now!" defaultButton:@"Relaunch" alternateButton:nil];
+
+        OEHUDAlert *alert = [OEHUDAlert alertWithMessageText:NSLocalizedString(@"Your library was moved sucessfully.", @"") defaultButton:NSLocalizedString(@"OK", @"") alternateButton:nil];
         [alert runModal];
-        
-        // restart application
-        NSString *script = [NSString stringWithFormat:@"sleep 0.1 && open '%@'", [[NSBundle mainBundle] bundlePath]];
-        [NSTask launchedTaskWithLaunchPath:@"/bin/sh" arguments:@[@"-c", script]];
-        exit(EXIT_SUCCESS);
     }
     else
     {
@@ -414,7 +433,7 @@
             [[library writerContext] save:nil];
         }];
 
-        if(error) [NSApp presentError:error];
+        if(error) [self presentError:error];
     }
     
     NSString *databasePath = [[[library databaseFolderURL] path] stringByAbbreviatingWithTildeInPath];
@@ -422,60 +441,17 @@
 }
 
 - (IBAction)toggleSystem:(id)sender
-{
-    NSString *systemIdentifier;
-    BOOL isCheckboxSender;
-
-    // This method is either invoked by a checkbox in the prefs or a notification
-    if([sender isKindOfClass:[OEButton class]])
-    {
-        systemIdentifier = [[sender cell] representedObject];
-        isCheckboxSender = YES;
-    }
-    else
-    {
-        systemIdentifier = [[sender object] systemIdentifier];
-        isCheckboxSender = NO;
-    }
+{    
+    OEButton *checkbox = (OEButton *)sender;
+    NSString *systemIdentifier = checkbox.cell.representedObject;
 
     OELibraryDatabase *database = [OELibraryDatabase defaultDatabase];
     NSManagedObjectContext *context = [database mainThreadContext];
     OEDBSystem *system = [OEDBSystem systemForPluginIdentifier:systemIdentifier inContext:context];
-    BOOL enabled = [[system enabled] boolValue];
-
-    // Make sure that at least one system is enabled.
-    // Otherwise the mainwindow sidebar would be messed up
-    if(enabled && [[OEDBSystem enabledSystemsinContext:context] count] == 1)
-    {
-        NSString *message = NSLocalizedString(@"At least one System must be enabled", @"");
-        NSString *button = NSLocalizedString(@"OK", @"");
-        OEHUDAlert *alert = [OEHUDAlert alertWithMessageText:message defaultButton:button alternateButton:nil];
-        [alert runModal];
-
-        if(isCheckboxSender)
-            [sender setState:NSOnState];
-
-        return;
-    }
-
-    // Make sure only systems with a valid plugin are enabled.
-    // Is also ensured by disabling ui element (checkbox)
-    if(![system plugin])
-    {
-        NSString *message = [NSString stringWithFormat:NSLocalizedString(@"%@ could not be enabled because its plugin was not found.", @""), [system name]];
-        NSString *button = NSLocalizedString(@"OK", @"");
-        OEHUDAlert *alert = [OEHUDAlert alertWithMessageText:message defaultButton:button alternateButton:nil];
-        [alert runModal];
-
-        if(isCheckboxSender)
-            [sender setState:NSOffState];
-
-        return;
-    }
-
-    [system setEnabled:[NSNumber numberWithBool:!enabled]];
-    [system save];
-    [[NSNotificationCenter defaultCenter] postNotificationName:OEDBSystemsDidChangeNotification object:system userInfo:nil];
+    
+    [system toggleEnabledAndPresentError];
+    
+    [self OE_rebuildAvailableLibraries];
 }
 
 - (IBAction)resetWarningDialogs:(id)sender
@@ -486,13 +462,17 @@
                               OEAutoSwitchCoreAlertSuppressionKey,
                               OERemoveGameFromCollectionAlertSuppressionKey,
                               OELoadAutoSaveAlertSuppressionKey,
-                              OESaveGameWhenQuitAlertSuppressionKey,
                               OEDeleteGameAlertSuppressionKey,
                               OESaveGameAlertSuppressionKey,
                               OEChangeCoreAlertSuppressionKey,
                               OEResetSystemAlertSuppressionKey,
                               OEStopEmulationAlertSuppressionKey,
-                              OERemoveGameFilesFromLibraryAlertSuppressionKey];
+                              OEDeleteSaveStateAlertSuppressionKey,
+                              OEDeleteScreenshotAlertSuppressionKey,
+                              OERemoveGameFilesFromLibraryAlertSuppressionKey,
+                              OERenameSpecialSaveStateAlertSuppressionKey,
+                              OEGameCoreGlitchesSuppressionKey,
+                              OEDownloadRomWarningSupperssionKey];
     
     [keysToRemove enumerateObjectsUsingBlock:^(NSString *key, NSUInteger idx, BOOL *stop) {
         [standardUserDefaults removeObjectForKey:key];
@@ -503,27 +483,29 @@
 
 - (void)OE_rebuildAvailableLibraries
 {
-    NSRect visibleRect  = [[self librariesView] visibleRect];
-    BOOL rebuildingList = [[[self librariesView] subviews] count] != 0;
-    [[[[self librariesView] subviews] copy] makeObjectsPerformSelector:@selector(removeFromSuperviewWithoutNeedingDisplay)];
+    NSRect visibleRect  = self.librariesView.visibleRect;
+    BOOL rebuildingList = self.librariesView.subviews.count != 0;
+    [[self.librariesView.subviews copy] makeObjectsPerformSelector:@selector(removeFromSuperviewWithoutNeedingDisplay)];
 
     // get all system plugins, ordered them by name
-    NSManagedObjectContext *context = [[OELibraryDatabase defaultDatabase] mainThreadContext];
+    NSManagedObjectContext *context = OELibraryDatabase.defaultDatabase.mainThreadContext;
     NSArray *systems = [OEDBSystem allSystemsInContext:context];
 
     // calculate number of rows (using 2 columns)
-    NSInteger rows = ceil([systems count] / 2.0);
+    NSInteger rows = ceil(systems.count / 2.0);
 
     // set some spaces and dimensions
     CGFloat hSpace = 16, vSpace = 10;
     CGFloat iWidth = 163, iHeight = 18;
     CGFloat topGap = 16, bottomGap = 16;
 
-    if([self librariesView] == nil) return;
+    if(self.librariesView == nil) return;
 
-    CGFloat width = [[self librariesView] frame].size.width;
     CGFloat height = (iHeight * rows + (rows - 1) * vSpace) + topGap + bottomGap;
-    [[self librariesView] setFrameSize:NSMakeSize(width, height)];
+    
+    NSRect librariesViewFrame = self.librariesView.frame;
+    librariesViewFrame.size.height = height;
+    self.librariesView.frame = librariesViewFrame;
 
     __block CGFloat x = vSpace;
     __block CGFloat y = height-topGap;
@@ -545,23 +527,22 @@
 
          // creating the button
          NSRect rect = NSMakeRect(x, y, iWidth, iHeight);
-         NSString *systemIdentifier = [system systemIdentifier];
+         NSString *systemIdentifier = system.systemIdentifier;
          OEButton *button = [[OEButton alloc] initWithFrame:rect];
          [button setThemeKey:@"dark_checkbox"];
-         [button setButtonType:NSSwitchButton];
-         [button setTarget:self];
-         [button setAction:@selector(toggleSystem:)];
-         [button setTitle:[system name]];
-         [button setState:[[system enabled] intValue]];
-         [[button cell] setRepresentedObject:systemIdentifier];
-
+         button.buttonType = NSSwitchButton;
+         button.target = self;
+         button.action = @selector(toggleSystem:);
+         button.title = system.name;
+         button.state = system.enabled.intValue;
+         button.cell.representedObject = systemIdentifier;
 
          // Check if a core is installed that is capable of running this system
          BOOL foundCore = NO;
-         NSArray *allPlugins = [OECorePlugin allPlugins];
+         NSArray *allPlugins = OECorePlugin.allPlugins;
          for(OECorePlugin *obj in allPlugins)
          {
-             if([[obj systemIdentifiers] containsObject:systemIdentifier])
+             if([obj.systemIdentifiers containsObject:systemIdentifier])
              {
                  foundCore = YES;
                  break;
@@ -572,41 +553,41 @@
          // e.g. Go to Cores preferences and download Core x
          // or we could add a "Fix This" button that automatically launches the "No core for system ... " - Dialog
          NSMutableArray *warnings = [NSMutableArray arrayWithCapacity:2];
-         if([system plugin] == nil)
+         if(system.plugin == nil)
          {
              [warnings addObject:NSLocalizedString(@"The System plugin could not be found!", @"")];
 
              // disabling ui element here so no system without a plugin can be enabled
-             [button setEnabled:NO];
+             button.enabled = NO;
          }
 
          if(!foundCore)
              [warnings addObject:NSLocalizedString(@"This System has no corresponding core installed.", @"")];
 
-         if([warnings count] != 0)
+         if(warnings.count != 0)
          {
              // Show a warning badge next to the checkbox
              // this is currently misusing the beta_icon image
 
-             NSPoint badgePosition = [button badgePosition];
+             NSPoint badgePosition = button.badgePosition;
              NSImageView *imageView = [[NSImageView alloc] initWithFrame:(NSRect){ badgePosition, { 16, 17 } }];
-             [imageView setImage:[NSImage imageNamed:@"beta_icon"]];
+             imageView.image = [NSImage imageNamed:@"beta_icon"];
 
              // TODO: Use a custom tooltip that fits our style better
-             [imageView setToolTip:[warnings componentsJoinedByString:@"\n"]];
-             [[self librariesView] addSubview:imageView];
+             imageView.toolTip = [warnings componentsJoinedByString:@"\n"];
+             [self.librariesView addSubview:imageView];
          }
 
-         [[self librariesView] addSubview:button];
+         [self.librariesView addSubview:button];
 
          // leave a little gap before we start the next item
          y -= vSpace;
      }];
 
     if(!rebuildingList)
-        [[self librariesView] scrollPoint:NSMakePoint(0, height)];
+        [self.librariesView scrollPoint:NSMakePoint(0, height)];
     else
-        [[self librariesView] scrollRectToVisible:visibleRect];
+        [self.librariesView scrollRectToVisible:visibleRect];
 }
 
 @end

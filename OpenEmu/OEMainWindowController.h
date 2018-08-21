@@ -24,16 +24,18 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
+
+@class OEButton;
 
 extern NSString *const OEForcePopoutGameWindowKey;
 extern NSString *const OEFullScreenGameWindowKey;
-extern NSString *const OEMainWindowFullscreenKey;
 
+@class OEDBGame;
 @class OEGameDocument;
 @class OELibraryController;
 
-@interface OEMainWindowController : NSWindowController <NSWindowDelegate>
+@interface OEMainWindowController : NSWindowController <NSWindowDelegate, NSWindowRestoration>
 
 @property IBOutlet OELibraryController *libraryController;
 @property(weak) IBOutlet NSView *placeholderView;
@@ -46,4 +48,9 @@ extern NSString *const OEMainWindowFullscreenKey;
 - (IBAction)undockGameWindow:(id)sender;
 - (IBAction)launchLastPlayedROM:(id)sender;
 
+// ugly hack, remove
+- (void)startGame:(OEDBGame*)game;
+@end
+
+@interface OEMainWindowTitlebarBackgroundView : NSView
 @end

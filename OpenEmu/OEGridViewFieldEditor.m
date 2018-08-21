@@ -45,13 +45,14 @@
         [[textView cell] setScrollable:YES];
         [textView setBezeled:NO];
         [textView setAllowsEditingTextAttributes:NO];
+        [textView setBackgroundColor:[NSColor whiteColor]];
         [self addSubview:textView];
 
         [self setAutoresizesSubviews:NO];
         [self setHidden:YES];
         [self setWantsLayer:YES];
 
-        NSFont *fieldEditorFont = [[NSFontManager sharedFontManager] fontWithFamily:@"Lucida Grande" traits:NSBoldFontMask weight:9 size:12];
+        NSFont *fieldEditorFont = [NSFont boldSystemFontOfSize:12];
         [self setAlignment:NSCenterTextAlignment];
         [self setBorderColor:[NSColor blackColor]];
         [self setFont:fieldEditorFont];

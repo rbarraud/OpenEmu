@@ -30,34 +30,31 @@
 
 @implementation OEPCFXSystemController
 
-- (OECanHandleState)canHandleFile:(NSString *)path
+- (OEFileSupport)canHandleFile:(__kindof OEFile *)file
 {
-    OECUESheet *cueSheet = [[OECUESheet alloc] initWithPath:path];
-    NSString *dataTrack = [cueSheet dataTrackPath];
+    if (![file isKindOfClass:[OECDSheet class]])
+        return OEFileSupportNo;
 
-    NSString *dataTrackPath = [[path stringByDeletingLastPathComponent] stringByAppendingPathComponent:dataTrack];
-    NSLog(@"PC-FX data track path: %@", dataTrackPath);
-
-    BOOL handleFileExtension = [super canHandleFileExtension:[path pathExtension]];
-    OECanHandleState canHandleFile = OECanHandleNo;
-
-    if(handleFileExtension)
+    OECDSheet *sheet = file;
+    for(NSURL *dataTrack in sheet.referencedBinaryFileURLs)
     {
         NSError *error = nil;
-        NSData *dataTrackBuffer = [NSData dataWithContentsOfFile:dataTrackPath options:NSDataReadingUncached error:&error];
+        NSData *dataTrackBuffer = [NSData dataWithContentsOfURL:dataTrack options:NSDataReadingUncached error:&error];
 
-        NSString* dataTrackString = @"PC-FX:Hu_CD-ROM ";
-        NSData* dataSearch = [dataTrackString dataUsingEncoding:NSUTF8StringEncoding];
+        NSString *dataTrackString = @"PC-FX:Hu_CD-ROM ";
+        NSData *dataSearch = [dataTrackString dataUsingEncoding:NSUTF8StringEncoding];
         // this still slows import down but we need to scan the disc as there's no common offset
         NSRange indexOfData = [dataTrackBuffer rangeOfData: dataSearch options:0 range:NSMakeRange(0, [dataTrackBuffer length])];
 
-        if(indexOfData.length > 0)
-        {
-            NSLog (@"'%@' at offset = 0x%lX", dataTrackString, indexOfData.location);
-            canHandleFile = OECanHandleYes;
-        }
+        if(indexOfData.length == 0)
+            continue;
+
+        NSLog(@"PC-FX data track: %@", dataTrack);
+        NSLog (@"'%@' at offset = 0x%lX", dataTrackString, indexOfData.location);
+        return OEFileSupportYes;
     }
-    return canHandleFile;
+
+    return OEFileSupportNo;
 }
 
 @end

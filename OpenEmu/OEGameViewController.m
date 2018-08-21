@@ -29,11 +29,9 @@
 #import "OEDBRom.h"
 #import "OEDBSystem.h"
 #import "OEDBGame.h"
+#import "OEDBScreenshot.h"
 
 #import "OEGameView.h"
-#import "OECorePickerController.h"
-#import "OEDOGameCoreHelper.h"
-#import "OEDOGameCoreManager.h"
 #import "OEGameCoreManager.h"
 #import "OEThreadGameCoreManager.h"
 #import "OEXPCGameCoreManager.h"
@@ -50,23 +48,21 @@
 #import "OEAudioDeviceManager.h"
 
 #import "OEHUDAlert+DefaultAlertsAdditions.h"
-#import "NSURL+OELibraryAdditions.h"
 #import "NSColor+OEAdditions.h"
-#import "NSViewController+OEAdditions.h"
 
-#import "OEPreferencesController.h"
 #import "OELibraryDatabase.h"
 
 #import <OpenEmuSystem/OpenEmuSystem.h>
+
+#import "OpenEmu-Swift.h"
 
 NSString *const OEGameVolumeKey = @"volume";
 NSString *const OEGameDefaultVideoFilterKey = @"videoFilter";
 NSString *const OEGameSystemVideoFilterKeyFormat = @"videoFilter.%@";
 NSString *const OEGameCoresInBackgroundKey = @"gameCoreInBackgroundThread";
-NSString *const OEDontShowGameTitleInWindowKey = @"dontShowGameTitleInWindow";
 NSString *const OEAutoSwitchCoreAlertSuppressionKey = @"changeCoreWhenLoadingStateWitoutConfirmation";
 NSString *const OEBackgroundPauseKey = @"backgroundPause";
-NSString *const OEForceCorePicker = @"forceCorePicker";
+NSString *const OEBackgroundControllerPlayKey = @"backgroundControllerPlay";
 NSString *const OEGameViewControllerEmulationWillFinishNotification = @"OEGameViewControllerEmulationWillFinishNotification";
 NSString *const OEGameViewControllerEmulationDidFinishNotification = @"OEGameViewControllerEmulationDidFinishNotification";
 NSString *const OETakeNativeScreenshots = @"takeNativeScreenshots";
@@ -75,6 +71,7 @@ NSString *const OEGameViewBackgroundColorKey = @"gameViewBackgroundColor";
 
 NSString *const OEScreenshotFileFormatKey = @"screenshotFormat";
 NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
+
 #define UDDefaultCoreMappingKeyPrefix   @"defaultCore"
 #define UDSystemCoreMappingKeyForSystemIdentifier(_SYSTEM_IDENTIFIER_) [NSString stringWithFormat:@"%@.%@", UDDefaultCoreMappingKeyPrefix, _SYSTEM_IDENTIFIER_]
 
@@ -85,6 +82,7 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
     OEIntSize   _screenSize;
     OEIntSize   _aspectSize;
     BOOL        _pausedByGoingToBackground;
+    NSUInteger  _discCount;
 }
 
 @end
@@ -118,24 +116,25 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
         NSString *backgroundColorName = [[NSUserDefaults standardUserDefaults] objectForKey:OEGameViewBackgroundColorKey];
         if(backgroundColorName != nil)
         {
-            NSColor *color = OENSColorFromString(backgroundColorName);
+            NSColor *color = [NSColor colorFromString:backgroundColorName];
             [_gameView setBackgroundColor:color];
         }
         
         [[self view] addSubview:_gameView];
 
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(viewDidChangeFrame:) name:NSViewFrameDidChangeNotification object:_gameView];
+
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(windowDidChangeScreen:) name:NSWindowDidMoveNotification object:self];
     }
     return self;
 }
 
 - (void)dealloc
 {
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
-
     [_gameView setDelegate:nil];
     _gameView = nil;
 
+    [_controlsWindow setGameWindow:nil];
     [_controlsWindow close];
     _controlsWindow = nil;
 }
@@ -146,15 +145,11 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
 {
     [super viewDidAppear];
 
-    if([_controlsWindow parentWindow] != nil)
-        [[_controlsWindow parentWindow] removeChildWindow:_controlsWindow];
-
     NSWindow *window = [self OE_rootWindow];
     if(window == nil) return;
 
-    [window addChildWindow:_controlsWindow ordered:NSWindowAbove];
-    [self OE_repositionControlsWindow];
-    [_controlsWindow orderFront:self];
+    [_controlsWindow setGameWindow:window];
+    [_controlsWindow repositionOnGameWindow];
 
     [window makeFirstResponder:_gameView];
 }
@@ -163,15 +158,30 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
 {
     [super viewWillDisappear];
 
-    [_controlsWindow hide];
+    [_controlsWindow hideAnimated:NO];
+    [_controlsWindow setGameWindow:nil];
     [[self OE_rootWindow] removeChildWindow:_controlsWindow];
 }
 
 #pragma mark - Controlling Emulation
-
 - (BOOL)supportsCheats;
 {
     return [[self document] supportsCheats];
+}
+
+- (BOOL)supportsSaveStates
+{
+    return [[self document] supportsSaveStates];
+}
+
+- (BOOL)supportsMultipleDiscs
+{
+    return [[self document] supportsMultipleDiscs];
+}
+
+- (NSUInteger)discCount
+{
+    return _discCount;
 }
 
 - (NSString *)coreIdentifier;
@@ -232,6 +242,8 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
         else
             [menuItem setState:NSOnState];
     }
+
+
     return YES;
 }
 
@@ -252,16 +264,28 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     [dateFormatter setDateFormat:@"yyyy-MM-dd HH.mm.ss"];
     NSString *timeStamp = [dateFormatter stringFromDate:[NSDate date]];
+
+    // Replace forward slashes in the game title with underscores because forward slashes aren't allowed in filenames.
+    NSMutableString *displayName = [self.document.rom.game.displayName mutableCopy];
+    [displayName replaceOccurrencesOfString:@"/" withString:@"_" options:0 range:NSMakeRange(0, displayName.length)];
     
-    NSURL *screenshotFolderURL = [[OELibraryDatabase defaultDatabase] screenshotFolderURL];
-    NSURL *screenshotURL = [screenshotFolderURL URLByAppendingPathComponent:[NSString stringWithFormat:@"%@ %@.png", [[[[self document] rom] game] displayName], timeStamp]];
+    NSString *fileName = [NSString stringWithFormat:@"%@ %@.png", displayName, timeStamp];
+    NSString *temporaryPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+    NSURL *temporaryURL = [NSURL fileURLWithPath:temporaryPath];
 
     __autoreleasing NSError *error;
-    if(![imageData writeToURL:screenshotURL options:NSDataWritingAtomic error:&error])
-        NSLog(@"Could not save screenshot at URL: %@, with error: %@", screenshotURL, error);
+    if(![imageData writeToURL:temporaryURL options:NSDataWritingAtomic error:&error])
+    {
+        NSLog(@"Could not save screenshot at URL: %@, with error: %@", temporaryURL, error);
+    } else {
+        OEDBRom *rom = [[self document] rom];
+        OEDBScreenshot *screenshot = [OEDBScreenshot createObjectInContext:[rom managedObjectContext] forROM:rom withFile:temporaryURL];
+        [screenshot save];
+        [[self gameView] showScreenShotNotification];
+    }
 }
 
-#pragma mark - OEGameCoreDisplayHelper methods
+#pragma mark - OEGameCoreOwner methods
 
 - (void)setEnableVSync:(BOOL)enable;
 {
@@ -287,6 +311,11 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
     [_gameView setAspectSize:newAspectSize];
 }
 
+- (void)setDiscCount:(NSUInteger)discCount
+{
+    _discCount = discCount;
+}
+
 #pragma mark - Info
 
 - (NSSize)defaultScreenSize
@@ -294,47 +323,11 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
     if(OEIntSizeIsEmpty(_screenSize) || OEIntSizeIsEmpty(_aspectSize))
         return NSMakeSize(400, 300);
 
-    CGFloat wr = (CGFloat) _aspectSize.width / _screenSize.width;
-    CGFloat hr = (CGFloat) _aspectSize.height / _screenSize.height;
-    CGFloat ratio = MAX(hr, wr);
-    NSSize scaled = NSMakeSize((wr / ratio), (hr / ratio));
-    
-    CGFloat halfw = scaled.width;
-    CGFloat halfh = scaled.height;
-    
-    return NSMakeSize(_screenSize.width / halfh, _screenSize.height / halfw);
+    NSSize corrected = [_gameView correctScreenSize:_screenSize forAspectSize:_aspectSize returnVertices:NO];
+    return corrected;
 }
 
 #pragma mark - Private Methods
-
-- (void)OE_repositionControlsWindow
-{
-    NSWindow *gameWindow = [self OE_rootWindow];
-    if(gameWindow == nil) return;
-
-    static const CGFloat _OEControlsMargin = 19;
-
-    NSRect gameViewFrameInWindow = [_gameView convertRect:[_gameView frame] toView:nil];
-    NSPoint origin = [gameWindow convertRectToScreen:gameViewFrameInWindow].origin;
-
-    origin.x += ([_gameView frame].size.width - [_controlsWindow frame].size.width) / 2;
-
-    // If the controls bar fits, it sits over the window
-    if([_gameView frame].size.width >= [_controlsWindow frame].size.width)
-        origin.y += _OEControlsMargin;
-    else
-    {
-        // Otherwise, it sits below the window
-        origin.y -= ([_controlsWindow frame].size.height + _OEControlsMargin);
-
-        // Unless below the window means it being off-screen, in which case it sits above the window
-        if(origin.y < NSMinY([[gameWindow screen] visibleFrame]))
-            origin.y = NSMaxY([gameWindow frame]) + _OEControlsMargin;
-    }
-
-    [_controlsWindow setFrameOrigin:origin];
-}
-
 - (NSWindow *)OE_rootWindow
 {
     NSWindow *window = [[self gameView] window];
@@ -347,7 +340,7 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
 
 - (void)viewDidChangeFrame:(NSNotification*)notification
 {
-    [self OE_repositionControlsWindow];
+    [_controlsWindow repositionOnGameWindow];
 }
 
 #pragma mark - OEGameViewDelegate Protocol
@@ -355,11 +348,6 @@ NSString *const OEScreenshotPropertiesKey = @"screenshotProperties";
 - (void)gameView:(OEGameView *)gameView didReceiveMouseEvent:(OEEvent *)event
 {
     [[self document] gameViewController:self didReceiveMouseEvent:event];
-}
-
-- (void)gameView:(OEGameView *)gameView setDrawSquarePixels:(BOOL)drawSquarePixels
-{
-    [[self document] gameViewController:self setDrawSquarePixels:drawSquarePixels];
 }
 
 @end

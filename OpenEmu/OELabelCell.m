@@ -25,6 +25,10 @@
  */
 
 #import "OELabelCell.h"
+#import "OETheme.h"
+#import "OEThemeTextAttributes.h"
+#import "OEThemeImage.h"
+
 @interface OELabelCell ()
 {
     NSMutableParagraphStyle *_style;
@@ -159,6 +163,16 @@
         [[self controlView] setNeedsDisplay:YES];
         [self OE_recomputeStateMask];
     }
+}
+
+- (NSSize)cellSize
+{
+    if (!_themed)
+        return [super cellSize];
+    NSSize res = [[self attributedStringValue] size];
+    res.height = round(res.height);
+    res.width = round(res.width + 4);
+    return res;
 }
 
 @synthesize themed=_themed, themeImage=_themeImage, themeTextAttributes=_themeTextAttributes;

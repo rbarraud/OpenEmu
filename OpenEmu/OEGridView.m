@@ -26,11 +26,12 @@
 
 #import "OEGridView.h"
 
-#import <QuickLook/QuickLook.h>
+#import "OETheme.h"
+#import "OEThemeImage.h"
+#import "OEThemeTextAttributes.h"
 
-#import "OEGridCell.h"
+#import "OEGridGameCell.h"
 #import "OEGridViewFieldEditor.h"
-#import "OEBackgroundNoisePattern.h"
 #import "OECoverGridDataSourceItem.h"
 
 #import "OEMenu.h"
@@ -40,8 +41,21 @@
 #import "IKImageWrapper.h"
 #import "IKRenderer.h"
 #import "IKImageBrowserLayoutManager.h"
+#import "IKImageBrowserGridGroup.h"
 
 #pragma mark -
+NSSize const defaultGridSize = (NSSize){26+142, 143};
+NSString *const OEImageBrowserGroupSubtitleKey = @"OEImageBrowserGroupSubtitleKey";
+
+//Removed the Category (ScaleFactorAdditions) in the IKCGRenderer implementation, for Compatibility with MacOS 10.14(beta 5)
+//With this temporary fix the App compiles in XCode 10b and Runs without crashing on startup on Mojave
+
+@implementation IKCGRenderer /*(ScaleFactorAdditions)*/
+- (unsigned long long)scaleFactor
+{
+    return self->_currentScaleFactor ?: 1.0;
+}
+@end
 
 @interface NSView (ApplePrivate)
 - (void)setClipsToBounds:(BOOL)arg1;
@@ -53,37 +67,68 @@
 @property NSInteger draggingIndex;
 @property NSInteger editingIndex;
 @property NSInteger ratingTracking;
+@property OEGridCell *trackingCell;
 @property OEGridViewFieldEditor *fieldEditor;
 
-@property CALayer *dragIndicationLayer;
+// Theme Objects
+@property (strong) OEThemeImage          *groupBackgroundImage;
+@property (strong) OEThemeTextAttributes *groupTitleAttributes;
+@property (strong) OEThemeTextAttributes *groupSubtitleAttributes;
 @end
 
 @implementation OEGridView
-static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
+
+static NSImage *lightingImage;
+
 + (void)initialize
 {
     if([self class] != [OEGridView class])
         return;
 
-    NSImage *nslightingImage = [NSImage imageNamed:@"background_lighting"];
-    lightingImage = [IKImageWrapper imageWithNSImage:nslightingImage];
+    lightingImage = [NSImage imageNamed:@"background_lighting"];
+}
 
-    OEBackgroundNoisePatternCreate();
-    OEBackgroundHighResolutionNoisePatternCreate();
+- (instancetype)init
+{
+    self = [super init];
+    if (self)
+    {
+        _cellClass = [IKImageBrowserCell class];
+    }
+    return self;
+}
 
-    noiseImage = [IKImageWrapper imageWithCGImage:OEBackgroundNoiseImageRef];
-    noiseImageHighRes = [IKImageWrapper imageWithCGImage:OEBackgroundHighResolutionNoiseImageRef];
+- (instancetype)initWithFrame:(NSRect)frameRect
+{
+    self = [super initWithFrame:frameRect];
+    if (self)
+    {
+        _cellClass = [IKImageBrowserCell class];
+        [self performSetup];
+    }
+    return self;
 }
 
 - (void)awakeFromNib
 {
+    [self performSetup];
+}
+
+- (void)performSetup
+{
     _editingIndex = NSNotFound;
     _ratingTracking = NSNotFound;
+
+    if([self groupThemeKey] == nil)
+    {
+        [self setGroupThemeKey:@"grid_group"];
+    }
 
     [self registerForDraggedTypes:[NSArray arrayWithObjects:NSFilenamesPboardType, NSPasteboardTypePNG, NSPasteboardTypeTIFF, nil]];
     [self setAllowsReordering:NO];
     [self setAllowsDroppingOnItems:YES];
     [self setAnimates:NO];
+
     [self setClipsToBounds:NO];
     [self setCellsStyleMask:IKCellsStyleNone];
 
@@ -96,12 +141,31 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 
     _fieldEditor = [[OEGridViewFieldEditor alloc] initWithFrame:NSMakeRect(50, 50, 50, 50)];
     [self addSubview:_fieldEditor];
+    
+    CALayer *bglayer = [[CALayer alloc] init];
+    [bglayer setContents:lightingImage];
+    [self setBackgroundLayer:bglayer];
 }
 
+- (void)setGroupThemeKey:(NSString*)key
+{
+    OETheme *theme = [OETheme sharedTheme];
+
+    _groupThemeKey = key;
+
+    NSString *backgroundImageKey = [key stringByAppendingString:@"_background"];
+    [self setGroupBackgroundImage:[theme themeImageForKey:backgroundImageKey]];
+
+    NSString *titleAttributesKey = [key stringByAppendingString:@"_title"];
+    [self setGroupTitleAttributes:[theme themeTextAttributesForKey:titleAttributesKey]];
+
+    NSString *subtitleAttributesKey = [key stringByAppendingString:@"_subtitle"];
+    [self setGroupSubtitleAttributes:[theme themeTextAttributesForKey:subtitleAttributesKey]];
+}
 #pragma mark - Cells
 - (IKImageBrowserCell *)newCellForRepresentedItem:(id) cell
 {
-	return [[OEGridCell alloc] init];
+    return [[[self cellClass] alloc] init];
 }
 #pragma mark -
 - (NSInteger)indexOfItemWithFrameAtPoint:(NSPoint)point
@@ -117,6 +181,32 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
     }];
     return result;
 }
+#pragma mark - Controlling Layout
+- (void)setAutomaticallyMinimizeRowMargin:(BOOL)flag
+{
+    [[self layoutManager] setAutomaticallyMinimizeRowMargin:flag];
+}
+- (BOOL)automaticallyMinimizeRowMargin
+{
+    return [[self layoutManager] automaticallyMinimizeRowMargin];
+}
+#pragma mark - ToolTips
+- (void)installToolTips
+{
+    [self removeAllToolTips];
+    [[self visibleItemIndexes] enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL *stop) {
+        IKImageBrowserCell *cell = [self cellForItemAtIndex:idx];
+        NSRect titleRect = [cell titleFrame];
+        [self addToolTipRect:titleRect owner:self userData:(void *)idx];
+    }];
+}
+
+- (NSString*)view:(NSView *)view stringForToolTip:(NSToolTipTag)tag point:(NSPoint)point userData:(void *)data
+{
+    NSUInteger idx = (NSUInteger)data;
+    id obj = [[self dataSource] imageBrowser:self itemAtIndex:idx];
+    return [obj imageTitle];
+}
 #pragma mark - Managing Responder
 - (BOOL)acceptsFirstResponder
 {
@@ -125,14 +215,90 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 
 - (BOOL)becomeFirstResponder
 {
-    return YES;
+    BOOL success = [super becomeFirstResponder];
+    [self setNeedsDisplay:YES];
+    return success;
 }
 
 - (BOOL)resignFirstResponder
 {
-    return YES;
+    BOOL success = [super resignFirstResponder];
+    [self setNeedsDisplay:YES];
+    return success;
 }
+
+- (void)delayedUpdateTrackingAreasAfterScrolling
+{
+    [[self trackingAreas] enumerateObjectsUsingBlock:^(NSTrackingArea *area, NSUInteger idx, BOOL *stop) {
+        [self removeTrackingArea:area];
+    }];
+
+    NSTrackingAreaOptions options = NSTrackingActiveInKeyWindow|NSTrackingMouseEnteredAndExited|NSTrackingMouseMoved;
+    [[self visibleItemIndexes] enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL *stop) {
+        OEGridCell *cell = (OEGridCell*)[self cellForItemAtIndex:idx];
+        if([cell isInteractive])
+        {
+            NSRect trackingRect = [cell trackingRect];
+            if(!NSEqualRects(trackingRect, NSZeroRect))
+            {
+                NSTrackingArea *area = [[NSTrackingArea alloc] initWithRect:trackingRect options:options owner:self userInfo:nil];
+                [self addTrackingArea:area];
+            }
+        }
+    }];
+
+    [self installToolTips];
+}
+
 #pragma mark - Mouse Interaction
+- (void)mouseEntered:(NSEvent *)theEvent
+{
+    NSPoint location = [theEvent locationInWindow];
+    NSPoint locationInView = [self convertPoint:location fromView:nil];
+
+    NSInteger itemIndex = [self indexOfItemAtPoint:locationInView];
+    if(itemIndex != NSNotFound)
+    {
+        OEGridCell *cell = (OEGridCell*)[self cellForItemAtIndex:itemIndex];
+        if([cell isInteractive] && [cell mouseEntered:theEvent])
+        {
+            _trackingCell = cell;
+        }
+    }
+}
+
+- (void)mouseMoved:(NSEvent *)theEvent
+{
+    if(_trackingCell == nil)
+    {
+        NSPoint mouseLocationInWindow = [theEvent locationInWindow];
+        NSPoint mouseLocationInView = [self convertPoint:mouseLocationInWindow fromView:nil];
+        NSInteger index = [self indexOfItemWithFrameAtPoint:mouseLocationInView];
+        if(index != NSNotFound)
+        {
+            OEGridCell *cell = (OEGridCell*)[self cellForItemAtIndex:index];
+            if([cell isInteractive])
+            {
+                _trackingCell = cell;
+            }
+        }
+    }
+
+    if(_trackingCell != nil && ![_trackingCell mouseMoved:theEvent])
+    {
+        _trackingCell = nil;
+    }
+}
+
+- (void)mouseExited:(NSEvent *)theEvent
+{
+    if(_trackingCell)
+    {
+        [_trackingCell mouseExited:theEvent];
+        _trackingCell = nil;
+    }
+}
+
 - (void)mouseDown:(NSEvent *)theEvent
 {
     [self OE_cancelFieldEditor];
@@ -143,15 +309,20 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 
     if(index != NSNotFound)
     {
-        OEGridCell *clickedCell = (OEGridCell*)[self cellForItemAtIndex:index];
-        const NSRect titleRect  = [clickedCell titleFrame];
-        const NSRect imageRect  = [clickedCell imageFrame];
-        const NSRect ratingRect = NSInsetRect([clickedCell ratingFrame], -5, -1);
+        OEGridCell *cell = (OEGridCell*)[self cellForItemAtIndex:index];
 
-        // see if user double clicked on title layer
-        if([theEvent clickCount] >= 2 && NSPointInRect(mouseLocationInView, titleRect))
+        const NSRect titleRect  = [cell titleFrame];
+        const NSRect imageRect  = [cell imageFrame];
+
+        if([cell isInteractive] && [cell mouseDown:theEvent])
         {
-            [self renameGameAtIndex:index];
+            _trackingCell = cell;
+            return;
+        }
+        // see if user double clicked on title layer
+        else if([theEvent clickCount] >= 2 && NSPointInRect(mouseLocationInView, titleRect))
+        {
+            [self beginEditingItemAtIndex:index];
             return;
         }
         // Check for dragging
@@ -159,15 +330,21 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
         {
             _draggingIndex = index;
         }
-        // Check for rating layer interaction
-        else if(NSPointInRect(mouseLocationInView, ratingRect))
+        else if([cell isKindOfClass:[OEGridGameCell class]])
         {
-            _ratingTracking = index;
-            [self OE_updateRatingForItemAtIndex:index withLocation:mouseLocationInView inRect:ratingRect];
-            return;
+            OEGridGameCell *clickedCell = (OEGridGameCell*)cell;
+            const NSRect ratingRect = NSInsetRect([clickedCell ratingFrame], -5, -1);
+
+            // Check for rating layer interaction
+            if(NSPointInRect(mouseLocationInView, ratingRect))
+            {
+                _ratingTracking = index;
+                [self OE_updateRatingForItemAtIndex:index withLocation:mouseLocationInView inRect:ratingRect];
+                return;
+            }
         }
     }
-
+    
     _lastPointInView = mouseLocationInView;
 
     [super mouseDown:theEvent];
@@ -176,6 +353,8 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 - (void)mouseDragged:(NSEvent *)theEvent
 {
     if(_draggingSession) return;
+
+    if(_trackingCell) return;
 
     const NSPoint mouseLocationInWindow = [theEvent locationInWindow];
     const NSPoint mouseLocationInView = [self convertPoint:mouseLocationInWindow fromView:nil];
@@ -187,15 +366,15 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
         NSMutableArray *draggingItems = [NSMutableArray array];
 
         [selectionIndexes enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL *stop) {
-            OEGridCell   *clickedCell = (OEGridCell*)[self cellForItemAtIndex:idx];
-            id           item         = [clickedCell representedItem];
-            const NSRect imageRect    = [clickedCell imageFrame];
+            IKImageBrowserCell *cell = [self cellForItemAtIndex:idx];
+            id           item         = [cell representedItem];
+            const NSRect imageRect    = [cell imageFrame];
 
             NSDraggingItem *dragItem = [[NSDraggingItem alloc] initWithPasteboardWriter:item];
             NSImage *dragImage = nil;
             if([[item imageUID] characterAtIndex:0] == ':')
             {
-                dragImage = [OEGridCell missingArtworkImageWithSize:imageRect.size];
+                dragImage = [OEGridGameCell missingArtworkImageWithSize:imageRect.size];
             }
             else
             {
@@ -221,7 +400,7 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
     }
     else if(_ratingTracking != NSNotFound)
     {
-        OEGridCell *clickedCell = (OEGridCell*)[self cellForItemAtIndex:_ratingTracking];
+        OEGridGameCell *clickedCell = (OEGridGameCell*)[self cellForItemAtIndex:_ratingTracking];
         NSRect ratingRect = NSInsetRect([clickedCell ratingFrame], -5, -1);
 
         [self OE_updateRatingForItemAtIndex:_ratingTracking withLocation:mouseLocationInView inRect:ratingRect];
@@ -234,21 +413,55 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 
 - (void)mouseUp:(NSEvent *)theEvent
 {
+    [_trackingCell mouseUp:theEvent];
+
     _ratingTracking = NSNotFound;
     _draggingIndex  = NSNotFound;
 
-    [super mouseUp:theEvent];
+    if(_trackingCell == nil)
+        [super mouseUp:theEvent];
+    else _trackingCell = nil;
+}
+
+- (id)groupAtViewLocation:(struct CGPoint)arg1 clickableArea:(BOOL)arg2
+{
+    // Return no group if grid view is looking for something clickable
+    // this prevents it from selecting all items in a group making group
+    // headers unclickable
+    if(arg2) return nil;
+    return [super groupAtViewLocation:arg1 clickableArea:arg2];
+}
+
+- (void)startSelectionProcess:(NSPoint)arg1
+{
+    // Since we disabled clickable group header image views will start
+    // selecting, this should be disabled as well for clicks starting in
+    // group headers
+    IKImageBrowserGridGroup *group = [super groupAtViewLocation:arg1 clickableArea:YES];
+    if(group == nil)
+        [super startSelectionProcess:arg1];
 }
 #pragma mark - Keyboard Interaction
 - (void)keyDown:(NSEvent*)event
 {
-    // original implementation does not pass space key to type-select
-    if([event keyCode]==kVK_Space)
-    {
-        [self handleKeyInput:event character:' '];
-    } else [super keyDown:event];
+    switch (event.keyCode) {
+        // original implementation does not pass space key to type-select
+        case kVK_Space:
+            if (![self.delegate respondsToSelector:@selector(toggleQuickLook)] ||
+                ![self.delegate toggleQuickLook])
+                [self handleKeyInput:event character:' '];
+            break;
+            
+        case kVK_Return:
+            [self beginEditingWithSelectedItem:self];
+            break;
+            
+        default:
+            [super keyDown:event];
+            break;
+    }
 }
-#pragma mark -
+
 - (NSMenu *)menuForEvent:(NSEvent *)theEvent
 {
     [[self window] makeFirstResponder:self];
@@ -266,15 +479,13 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
             [self setSelectionIndexes:indexes byExtendingSelection:NO];
 
         NSMenu *contextMenu = [(id <OEGridViewMenuSource>)[self dataSource] gridView:self menuForItemsAtIndexes:indexes];
+        if(!contextMenu) return nil;
 
         OEMenuStyle     style      = ([[NSUserDefaults standardUserDefaults] boolForKey:OEMenuOptionsStyleKey] ? OEMenuStyleLight : OEMenuStyleDark);
         IKImageBrowserCell *itemCell   = [self cellForItemAtIndex:index];
 
         NSRect          hitRect             = NSInsetRect([itemCell imageFrame], 5, 5);
         //NSRect          hitRectOnView       = [itemCell convertRect:hitRect toLayer:self.layer];
-        int major, minor;
-        GetSystemVersion(&major, &minor, NULL);
-        if (major == 10 && minor < 8) hitRect.origin.y = self.bounds.size.height - hitRect.origin.y - hitRect.size.height;
         NSRect          hitRectOnWindow     = [self convertRect:hitRect toView:nil];
         NSRect          visibleRectOnWindow = [self convertRect:[self visibleRect] toView:nil];
         NSRect          visibleItemRect     = NSIntersectionRect(hitRectOnWindow, visibleRectOnWindow);
@@ -301,13 +512,11 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 #pragma mark - NSDraggingSource
 - (NSDragOperation)draggingSession:(NSDraggingSession *)session sourceOperationMaskForDraggingContext:(NSDraggingContext)context
 {
-    DLog();
-    return context == NSDraggingContextWithinApplication ? NSDragOperationCopy : NSDragOperationNone;
+    return NSDragOperationCopy;
 }
 
 - (void)draggingSession:(NSDraggingSession *)session endedAtPoint:(NSPoint)screenPoint operation:(NSDragOperation)operation
 {
-    DLog();
     _draggingSession = nil;
     _draggingIndex  = NSNotFound;
 }
@@ -323,6 +532,8 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 #pragma mark - NSDraggingDestination
 - (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender
 {
+    if([sender draggingSource] == self) return NSDragOperationNone;
+
     [self OE_generateProposedImageFromPasteboard:[sender draggingPasteboard]];
     NSDragOperation op = [super draggingEntered:sender];
     return op;
@@ -330,6 +541,8 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)sender
 {
+    if([sender draggingSource] == self) return NO;
+
     [self setProposedImage:nil];
     return [super performDragOperation:sender];
 }
@@ -342,6 +555,8 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 
 - (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)sender
 {
+    if([sender draggingSource] == self) return NSDragOperationNone;
+
     NSDragOperation op = [super draggingUpdated:sender];
     return op;
 }
@@ -387,7 +602,7 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 
 - (void)setRating:(NSInteger)rating forGameAtIndex:(NSInteger)index
 {
-    OEGridCell *selectedCell = (OEGridCell *)[self cellForItemAtIndex:index];
+    OEGridGameCell *selectedCell = (OEGridGameCell *)[self cellForItemAtIndex:index];
     id <OECoverGridDataSourceItem> selectedGame = [selectedCell representedItem];
     [selectedGame setGridRating:rating];
 
@@ -395,7 +610,7 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
     [self reloadData];
 }
 #pragma mark - Renaming items
-- (void)renameSelectedGame:(id)sender
+- (void)beginEditingWithSelectedItem:(id)sender
 {
     if([[self selectionIndexes] count] != 1)
     {
@@ -404,17 +619,13 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
     }
 
     NSUInteger selectedIndex = [[self selectionIndexes] firstIndex];
-    [self renameGameAtIndex:selectedIndex];
+    [self beginEditingItemAtIndex:selectedIndex];
 }
 
-- (void)renameGameAtIndex:(NSInteger)index
+- (void)beginEditingItemAtIndex:(NSInteger)index
 {
     if(![[self fieldEditor] isHidden])
         [self OE_cancelFieldEditor];
-
-    OEGridCell *selectedCell = (OEGridCell *)[self cellForItemAtIndex:index];
-    if(!selectedCell) return;
-    if(![selectedCell isKindOfClass:[OEGridCell class]]) return;
 
     [self OE_setupFieldEditorForCellAtIndex:index];
 }
@@ -422,16 +633,14 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 #pragma mark -
 - (void)OE_setupFieldEditorForCellAtIndex:(NSInteger)index
 {
-    OEGridCell *cell = (OEGridCell*)[self cellForItemAtIndex:index];
+    IKImageBrowserCell *cell = [self cellForItemAtIndex:index];
     _editingIndex = index;
 
     NSRect fieldFrame = [cell titleFrame];
     fieldFrame        = NSOffsetRect(NSInsetRect(fieldFrame, 0.0, -1.0), 0.0, 1.0);
     [_fieldEditor setFrame:[self backingAlignedRect:fieldFrame options:NSAlignAllEdgesNearest]];
 
-    //[textLayer setHidden:YES];
-
-    NSString *title = [[cell representedItem] displayName];
+    NSString *title = [[cell representedItem] imageTitle];
     [_fieldEditor setString:title];
     [_fieldEditor setDelegate:self];
     [_fieldEditor setHidden:NO];
@@ -469,13 +678,10 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
     {
         if(_editingIndex == NSNotFound) return;
 
-        OEGridCell *selectedCell = (OEGridCell *)[self cellForItemAtIndex:_editingIndex];
-        id <OECoverGridDataSourceItem> selectedItem = [selectedCell representedItem];
-
-        [selectedItem setGridTitle:[_fieldEditor string]];
-        if([selectedItem isKindOfClass:[NSManagedObject class]])
+        if([[self delegate] respondsToSelector:@selector(gridView:setTitle:forItemAtIndex:)])
         {
-            [[(NSManagedObject*)selectedItem managedObjectContext] save:nil];
+            NSString *title = [_fieldEditor string];
+            [[self delegate] gridView:self setTitle:title forItemAtIndex:_editingIndex];
         }
 
         [self OE_cancelFieldEditor];
@@ -514,32 +720,16 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
 
     NSUInteger scaleFactor = [renderer scaleFactor];
     [renderer setColorRed:0.03 Green:0.41 Blue:0.85 Alpha:1.0];
-
+    
     NSRect dragRect = [[self enclosingScrollView] documentVisibleRect];
+    
+    NSEdgeInsets contentInsets = [[self enclosingScrollView] contentInsets];
+    dragRect.size.height -= contentInsets.top + contentInsets.bottom + 2;
+    
     dragRect = NSInsetRect(dragRect, 1.0*scaleFactor, 1.0*scaleFactor);
     dragRect = NSIntegralRect(dragRect);
 
     [renderer drawRoundedRect:dragRect radius:8.0*scaleFactor lineWidth:2.0*scaleFactor cacheIt:YES];
-}
-
-- (void)drawBackground:(struct CGRect)arg1
-{
-    const id <IKRenderer> renderer = [self renderer];
-    const CGFloat scaleFactor = [renderer scaleFactor];
-
-    arg1 = [[self enclosingScrollView] documentVisibleRect];
-
-    [renderer clearViewport:arg1];
-    [renderer drawImage:lightingImage inRect:arg1 fromRect:NSZeroRect alpha:1.0];
-
-    IKImageWrapper *image = noiseImageHighRes;
-    if(scaleFactor != 1) image = noiseImageHighRes;
-
-    NSSize imageSize = {image.size.width/scaleFactor, image.size.height/scaleFactor};
-    for(CGFloat y=NSMinY(arg1); y < NSMaxY(arg1); y+=imageSize.height)
-        for(CGFloat x=NSMinX(arg1); x < NSMaxX(arg1); x+=imageSize.width)
-            [renderer drawImage:image inRect:(CGRect){{x,y},imageSize} fromRect:NSZeroRect alpha:1.0]
-            ;
 }
 
 - (void)drawGroupsOverlays
@@ -547,15 +737,106 @@ static IKImageWrapper *lightingImage, *noiseImageHighRes, *noiseImage;
     [super drawGroupsOverlays];
 
     const id <IKRenderer> renderer = [self renderer];
-    const NSColor *fullColor  = [[NSColor blackColor] colorWithAlphaComponent:0.4];
-    const NSColor *emptyColor = [NSColor clearColor];
-
     const NSRect visibleRect = [[self enclosingScrollView] documentVisibleRect];
-    const NSRect gradientRectBottom = NSMakeRect(0.0, NSMinY(visibleRect), NSWidth(visibleRect), 8.0);
-    const NSRect gradientRectTop = NSMakeRect(0.0, NSMaxY(visibleRect) - 8.0, NSWidth(visibleRect), 8.0);
+    
+    [renderer setColorRed:0.0 Green:0.0 Blue:0.0 Alpha:1.0];
+    [renderer fillRect:NSMakeRect(0, NSMinY(visibleRect)-10, NSWidth(visibleRect), 10)];
+}
 
-    [renderer fillGradientInRect:gradientRectBottom bottomColor:fullColor topColor:emptyColor];
-    [renderer fillGradientInRect:gradientRectTop bottomColor:emptyColor   topColor:fullColor];
+#pragma mark - Groups
+- (id)gridGroupFromDictionary:(NSDictionary*)arg1
+{
+    IKImageBrowserGridGroup *group = [super gridGroupFromDictionary:arg1];
+
+    NSString *subtitle = [arg1 objectForKey:OEImageBrowserGroupSubtitleKey];
+    if(subtitle) [group setObject:subtitle forKey:OEImageBrowserGroupSubtitleKey];
+
+    return group;
+}
+
+- (void)drawGroupsBackground
+{
+    const NSRect visibleRect = [self visibleRect];
+    [[[self layoutManager] groups] enumerateObjectsUsingBlock:^(IKImageBrowserGridGroup *group, NSUInteger idx, BOOL *stop) {
+        const NSRect groupHeaderRect = [self _rectOfGroupHeader:group];
+        // draw group header if it's visible
+        if(!NSEqualRects(NSIntersectionRect(visibleRect, groupHeaderRect), NSZeroRect))
+        {
+            [self drawGroup:group withRect:groupHeaderRect];
+        }
+    }];
+
+}
+
+- (void)drawGroup:(IKImageBrowserGridGroup*)group withRect:(NSRect)headerRect
+{
+    const CGFloat HeaderLeftBorder  = 14.0;
+    const CGFloat HeaderRightBorder = 14.0;
+
+    id <IKRenderer> renderer = [self renderer];
+
+    OEThemeState state = OEThemeStateDefault;
+
+    NSImage *nsbackgroundImage = [[self groupBackgroundImage] imageForState:state];
+    IKImageWrapper *backgroundImage = [IKImageWrapper imageWithNSImage:nsbackgroundImage];
+
+    const NSSize backgroundImageSize = [backgroundImage size];
+    headerRect.origin.y   += NSHeight(headerRect)-backgroundImageSize.height;
+    headerRect.size.height = backgroundImageSize.height;
+
+    [renderer drawImage:backgroundImage inRect:headerRect fromRect:NSZeroRect alpha:1.0];
+
+    NSString *title = [group title];
+    if(title != nil)
+    {
+        NSDictionary *titleAttributes = [[self groupTitleAttributes] textAttributesForState:state] ?: @{};
+        NSRect titleRect = (NSRect){{NSMinX(headerRect)+HeaderLeftBorder, NSMinY(headerRect)},
+            {NSWidth(headerRect)-HeaderLeftBorder, NSHeight(headerRect)}};
+
+        // center text
+        NSAttributedString *string = [[NSAttributedString alloc] initWithString:title attributes:titleAttributes];
+        CGFloat stringHeight = [string size].height;
+        titleRect = NSInsetRect(titleRect, 0, (NSHeight(titleRect)-stringHeight)/4.0);
+
+        [renderer drawText:title inRect:titleRect withAttributes:titleAttributes withAlpha:1.0];
+    }
+
+    NSString *subtitle = [group objectForKey:OEImageBrowserGroupSubtitleKey];
+    if(subtitle != nil)
+    {
+        NSDictionary *subtitleAttributes = [[self groupSubtitleAttributes] textAttributesForState:state] ?: @{};
+        NSRect subtitleRect = (NSRect){{NSMinX(headerRect)+HeaderLeftBorder, NSMinY(headerRect)},
+            {NSWidth(headerRect)-HeaderLeftBorder-HeaderRightBorder, NSHeight(headerRect)}};
+
+        // center text
+        NSAttributedString *string = [[NSAttributedString alloc] initWithString:subtitle attributes:subtitleAttributes];
+        CGFloat stringHeight = [string size].height;
+        subtitleRect = NSInsetRect(subtitleRect, 0, (NSHeight(subtitleRect)-stringHeight)/4.0);
+
+        [renderer drawText:subtitle inRect:subtitleRect withAttributes:subtitleAttributes withAlpha:1.0];
+    }
+}
+
+#pragma mark -
+
+- (void)reloadCellDataAtIndex:(unsigned long long)arg1
+{
+    [super reloadCellDataAtIndex:arg1];
+}
+
+- (void)reloadData
+{
+    // Store currently selected indexes.
+    NSIndexSet *selectionIndexes = self.selectionIndexes;
+    
+    [super reloadData];
+    
+    // Restore previously selected indexes within the current item count.
+    NSUInteger indexCount = [self.dataSource numberOfItemsInImageBrowser:self];
+    NSIndexSet *newSelectionIndexes = [selectionIndexes indexesPassingTest:^BOOL(NSUInteger idx, BOOL * _Nonnull stop) {
+        return idx < indexCount;
+    }];
+    [self setSelectionIndexes:newSelectionIndexes byExtendingSelection:NO];
 }
 
 @end

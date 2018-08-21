@@ -26,6 +26,10 @@
 
 #import "OEBlankSlateBackgroundView.h"
 #import "OEBackgroundNoisePattern.h"
+@import QuartzCore;
+
+@interface OEBlankSlateBackgroundView () <CALayoutManager, CALayerDelegate>
+@end
 
 @implementation OEBlankSlateBackgroundView
 
@@ -51,8 +55,6 @@
 
 - (void)OE_commonInit
 {
-    OEBackgroundNoisePatternCreate();
-
     const NSRect bounds = [self bounds];
 
     [self setWantsLayer:YES];
@@ -90,15 +92,10 @@
         if(obj!=[[[self subviews] lastObject] layer]) [obj setFrame:bounds];
     }];
 
-    [CATransaction flush];
+    [CATransaction commit];
 }
 
 #pragma mark - CALayer Delegate
-- (id < CAAction >)actionForLayer:(CALayer *)layer forKey:(NSString *)key
-{
-    return nil;
-}
-
 - (BOOL)layer:(CALayer *)layer shouldInheritContentsScale:(CGFloat)newScale fromWindow:(NSWindow *)window
 {
     if([layer backgroundColor] == NULL) return YES;

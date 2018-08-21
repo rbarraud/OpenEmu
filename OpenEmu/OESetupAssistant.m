@@ -25,7 +25,6 @@
  */
 
 #import "OESetupAssistant.h"
-#import "NSViewController+OEAdditions.h"
 #import "OESetupAssistantTableView.h"
 #import "OEFiniteStateMachine.h"
 #import "OEButton.h"
@@ -33,6 +32,8 @@
 
 #import "OECoreUpdater.h"
 #import "OECoreDownload.h"
+
+@import QuartzCore;
 
 #pragma mark - Public variables
 
@@ -123,7 +124,7 @@ enum : OEFSMEventLabel
 - (void)OE_goForwardToView:(NSView *)view;
 - (void)OE_goBackToView:(NSView *)view;
 - (void)OE_dissolveToView:(NSView *)view;
-- (void)OE_processVolumeNotification:(NSNotification *)notification;;
+- (void)OE_processVolumeNotification:(NSNotification *)notification;
 
 @end
 
@@ -320,12 +321,12 @@ enum : OEFSMEventLabel
     [_fsm addTransitionFrom:_OEFSMCoreSelectionState to:_OEFSMWelcomeState event:_OEFSMBackEvent action:^{
         [blockSelf OE_goBackToView:[blockSelf welcomeView]];
     }];
-    [_fsm addTransitionFrom:_OEFSMCoreSelectionState to:_OEFSMGameScannerSelectionState event:_OEFSMNextEvent action:^{
-        [blockSelf OE_goForwardToView:[blockSelf gameScannerAllowView]];
+    [_fsm addTransitionFrom:_OEFSMCoreSelectionState to:_OEFSMLastScreenState event:_OEFSMNextEvent action:^{
+        [blockSelf OE_goForwardToView:[blockSelf lastStepView]];
     }];
 
     // Game scanner allow checkbox screen
-
+/*
     [_fsm addState:_OEFSMGameScannerSelectionState];
     [[self allowScanForGames] setState:NSOffState];
     [_fsm addTransitionFrom:_OEFSMGameScannerSelectionState to:_OEFSMCoreSelectionState event:_OEFSMBackEvent action:^{
@@ -350,12 +351,12 @@ enum : OEFSMEventLabel
     [_fsm addTransitionFrom:_OEFSMGameScannerVolumeSelectionState to:_OEFSMLastScreenState event:_OEFSMNextEvent action:^{
         [blockSelf OE_goForwardToView:[blockSelf lastStepView]];
     }];
-
+*/
     // Last screen
 
     [_fsm addState:_OEFSMLastScreenState];
-    [_fsm addTransitionFrom:_OEFSMLastScreenState to:_OEFSMGameScannerSelectionState event:_OEFSMBackEvent action:^{
-        [blockSelf OE_goBackToView:[blockSelf gameScannerAllowView]];
+    [_fsm addTransitionFrom:_OEFSMLastScreenState to:_OEFSMCoreSelectionState event:_OEFSMBackEvent action:^{
+        [blockSelf OE_goBackToView:[blockSelf coreSelectionView]];
     }];
     [_fsm addTransitionFrom:_OEFSMLastScreenState to:_OEFSMEndState event:_OEFSMNextEvent action:nil];
 
@@ -366,6 +367,8 @@ enum : OEFSMEventLabel
         [[NSUserDefaults standardUserDefaults] setBool:YES forKey:OESetupAssistantHasFinishedKey];
 
         NSMutableArray *selectedVolumes = nil;
+        BOOL shouldScan = NO;
+/*
         BOOL shouldScan = ([[blockSelf allowScanForGames] state] == NSOnState);
         if(shouldScan)
         {
@@ -375,7 +378,7 @@ enum : OEFSMEventLabel
                 if([volumeInfo isSelected]) [selectedVolumes addObject:[volumeInfo URL]];
             }
         }
-
+*/
         if([blockSelf completionBlock] != nil) [blockSelf completionBlock](shouldScan, selectedVolumes);
     }];
 }
@@ -435,7 +438,26 @@ enum : OEFSMEventLabel
         
         if([identifier isEqualToString:@"enabled"])             return @([coreInfo isSelected]);
         else if([identifier isEqualToString:@"emulatorName"])   return [[coreInfo core] name];
-        else if([identifier isEqualToString:@"emulatorSystem"]) return [[[coreInfo core] systemNames] componentsJoinedByString:@", "];
+        else if([identifier isEqualToString:@"emulatorSystem"])
+        {
+            NSUInteger columnIndex = [tableView columnWithIdentifier:[tableColumn identifier]];
+            OESetupAssistantMinorTextCell *cell = (OESetupAssistantMinorTextCell *)[self tableView:tableView dataCellForTableColumn:tableColumn row:rowIndex];
+            NSMutableArray *systemNames = [[[coreInfo core] systemNames] mutableCopy];
+            NSString *systemNamesString = nil;
+            CGFloat columnWidth = NSWidth([tableView rectOfColumn:columnIndex]);
+            CGFloat stringWidth = 0.0;
+            do
+            {
+                systemNamesString = [systemNames componentsJoinedByString:@", "];
+                stringWidth = [systemNamesString sizeWithAttributes:[cell attributes]].width;
+                if([systemNames count] == 0)
+                    return [[[coreInfo core] systemNames] componentsJoinedByString:@", "];
+                
+                [systemNames removeObjectAtIndex:[systemNames count]-1];
+            } while(stringWidth > columnWidth);
+            
+            return systemNamesString;
+        }
     }
     else if(tableView == [self mountedVolumesTableView])
     {
@@ -498,6 +520,18 @@ enum : OEFSMEventLabel
     return cell;
 }
 
+- (NSString*)tableView:(NSTableView *)tableView toolTipForCell:(NSCell *)cell rect:(NSRectPointer)rect tableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row mouseLocation:(NSPoint)mouseLocation
+{
+    if(tableView == _installCoreTableView && [[tableColumn identifier] isEqualToString:@"emulatorSystem"])
+    {
+        OESetupCoreInfo *coreInfo = [_coresToDownload objectAtIndex:row];
+        return [[[coreInfo core] systemNames] componentsJoinedByString:@", "];
+    }
+    
+    if([cell isKindOfClass:[NSTextFieldCell class]])
+        return [cell stringValue];
+    return @"";
+}
 @end
 
 #pragma mark - OESetupCoreInfo

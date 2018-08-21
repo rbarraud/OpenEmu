@@ -24,14 +24,14 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
-#import "OEMenu.h"
+@import Cocoa;
 
 extern NSString *const OEGameControlsBarCanDeleteSaveStatesKey;
 extern NSString *const OEGameControlsBarShowsAutoSaveStateKey;
 extern NSString *const OEGameControlsBarShowsQuickSaveStateKey;
 extern NSString *const OEGameControlsBarHidesOptionButtonKey;
 extern NSString *const OEGameControlsBarFadeOutDelayKey;
+extern NSString *const OEGameControlsBarShowsAudioOutput;
 
 @class OEGameViewController;
 @interface OEGameControlsBar : NSWindow <NSMenuDelegate>
@@ -39,20 +39,20 @@ extern NSString *const OEGameControlsBarFadeOutDelayKey;
 - (id)initWithGameViewController:(OEGameViewController*)controller;
 
 - (void)show;
-- (void)hide;
+- (void)hideAnimated:(BOOL)animated;
 
 - (BOOL)canFadeOut;
 
-@property(nonatomic) CGFloat volume;
+- (void)repositionOnGameWindow;
 
+@property(nonatomic) CGFloat volume;
 @property(readwrite) BOOL canShow;
 
 #pragma mark - Updating UI States
-
 - (void)reflectVolume:(CGFloat)volume;
 - (void)reflectEmulationRunning:(BOOL)isEmulationRunning;
 
 @property(readonly, unsafe_unretained) OEGameViewController *gameViewController;
-
+@property (nonatomic, strong) NSWindow *gameWindow;
 @end
 

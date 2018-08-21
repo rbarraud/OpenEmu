@@ -31,7 +31,7 @@
 #import "OEMenuDocumentView+OEMenuView.h"
 #import "NSMenuItem+OEMenuItemExtraDataAdditions.h"
 #import "OETheme.h"
-#import <Carbon/Carbon.h>
+#import "OEMenuItemExtraData.h"
 
 #pragma mark -
 #pragma mark Background Image Insets
@@ -130,11 +130,6 @@ static const CGFloat OEMenuScrollAutoStep    = 8.0;
     }
 
     return self;
-}
-
-- (void)dealloc
-{
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)viewDidMoveToSuperview
@@ -511,10 +506,10 @@ static const CGFloat OEMenuScrollAutoStep    = 8.0;
     OEMenu     *menu            = [self OE_menu];
     NSMenuItem *highlightedItem = [menu highlightedItem];
 
-    if([menu OE_closing] || [highlightedItem hasSubmenu]) return;
+    if([menu OE_closing] || ([highlightedItem hasSubmenu] && [highlightedItem isEnabled])) return;
     [menu OE_setClosing:YES];
 
-    if(highlightedItem != nil && ![highlightedItem isSeparatorItem])
+    if(highlightedItem != nil && ![highlightedItem isSeparatorItem] && [highlightedItem isEnabled])
     {
         // Flash the highlighted item right before closing the submenu
         [self performSelector:@selector(OE_flashItem:) withObject:highlightedItem afterDelay:OEMenuItemFlashDelay];
@@ -856,7 +851,7 @@ static const CGFloat OEMenuScrollAutoStep    = 8.0;
                     v1                 = NSMinX(arrowRect);
                     v2                 = NSMaxX(arrowRect);
                 }
-                arrowRect.origin.y = attachedPoint.y - floor((abs(_backgroundEdgeInsets.top - _backgroundEdgeInsets.bottom) + arrowRect.size.height) / 2.0);
+                arrowRect.origin.y = attachedPoint.y - floor((fabs(_backgroundEdgeInsets.top - _backgroundEdgeInsets.bottom) + arrowRect.size.height) / 2.0);
 
                 point1 = NSMakePoint(v1, NSMinY(arrowRect));
                 point2 = NSMakePoint(v2, floor(NSMidY(arrowRect)));
@@ -878,7 +873,7 @@ static const CGFloat OEMenuScrollAutoStep    = 8.0;
                     v1                 = NSMinY(arrowRect);
                     v2                 = NSMaxY(arrowRect);
                 }
-                arrowRect.origin.x = attachedPoint.x - floor((abs(_backgroundEdgeInsets.left - _backgroundEdgeInsets.right) + arrowRect.size.width) / 2.0);
+                arrowRect.origin.x = attachedPoint.x - floor((fabs(_backgroundEdgeInsets.left - _backgroundEdgeInsets.right) + arrowRect.size.width) / 2.0);
 
                 point1 = NSMakePoint(NSMinX(arrowRect),        v1);
                 point2 = NSMakePoint(floor(NSMidX(arrowRect)), v2);
@@ -957,11 +952,6 @@ static const CGFloat OEMenuScrollAutoStep    = 8.0;
 }
 
 + (CGFloat)scrollerWidthForControlSize:(NSControlSize)controlSize scrollerStyle:(NSScrollerStyle)scrollerStyle
-{
-    return 0.0;
-}
-
-+ (CGFloat)scrollerWidth
 {
     return 0.0;
 }

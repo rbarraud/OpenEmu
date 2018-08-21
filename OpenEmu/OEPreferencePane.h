@@ -24,16 +24,18 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
+@import Foundation;
 
+NS_ASSUME_NONNULL_BEGIN
 
 @protocol OEPreferencePane <NSObject>
-- (NSImage *)icon;
-- (NSString *)title;
-- (NSString *)localizedTitle;
 
-- (NSSize)viewSize;
+@property (readonly) NSImage *icon;
+@property (readonly) NSString *title;
+@property (readonly) NSString *localizedTitle;
 
-@optional
-- (NSColor *)toolbarSeparationColor;
+@property (readonly) NSSize viewSize;
+
 @end
+
+NS_ASSUME_NONNULL_END

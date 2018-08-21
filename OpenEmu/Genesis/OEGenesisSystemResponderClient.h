@@ -42,12 +42,17 @@ typedef enum _OEGenesisButton
     OEGenesisButtonZ,
     OEGenesisButtonStart,
     OEGenesisButtonMode,
-    OEGenesisButtonCount,
+    OEGenesisButtonCount
 } OEGenesisButton;
 
 @protocol OEGenesisSystemResponderClient <OESystemResponderClient, NSObject>
 
 - (oneway void)didPushGenesisButton:(OEGenesisButton)button forPlayer:(NSUInteger)player;
 - (oneway void)didReleaseGenesisButton:(OEGenesisButton)button forPlayer:(NSUInteger)player;
+- (oneway void)mouseMovedAtPoint:(OEIntPoint)point;
+- (oneway void)leftMouseDownAtPoint:(OEIntPoint)point;
+- (oneway void)leftMouseUp;
+- (oneway void)rightMouseDownAtPoint:(OEIntPoint)point;
+- (oneway void)rightMouseUp;
 
 @end

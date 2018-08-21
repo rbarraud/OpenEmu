@@ -196,5 +196,33 @@
 		<key>OEGGButtonStart</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonOptions</string>
 	</dict>
+	<key>OEControllerGCExtendedGamepadProfile</key>
+	<dict>
+		<key>OEGGButtonUp</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadUp</string>
+		<key>OEGGButtonDown</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadDown</string>
+		<key>OEGGButtonLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadLeft</string>
+		<key>OEGGButtonRight</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadRight</string>
+		<key>OEGGButtonA</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonX</string>
+		<key>OEGGButtonB</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonA</string>
+		<key>OEGGButtonStart</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonHome</string>
+	</dict>
+	<key>OEControllerNintendoSwitchProController</key>
+	<dict>
+		<key>OEGGButtonUp</key>
+		<string>OEControllerNintendoSwitchProControllerDPadUp</string>
+		<key>OEGGButtonA</key>
+		<string>OEControllerNintendoSwitchProControllerButtonY</string>
+		<key>OEGGButtonB</key>
+		<string>OEControllerNintendoSwitchProControllerButtonB</string>
+		<key>OEGGButtonStart</key>
+		<string>OEControllerNintendoSwitchProControllerButtonPlus</string>
+	</dict>
 </dict>
 </plist>

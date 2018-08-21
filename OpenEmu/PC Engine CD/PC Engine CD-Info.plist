@@ -9,7 +9,7 @@
 	<key>CFBundleIconFile</key>
 	<string></string>
 	<key>CFBundleIdentifier</key>
-	<string>org.openemu.${PRODUCT_NAME:rfc1034identifier}</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -139,6 +139,7 @@
 	<key>OEFileSuffixes</key>
 	<array>
 		<string>cue</string>
+		<string>ccd</string>
 	</array>
 	<key>OEGenericControlNamesKey</key>
 	<array>
@@ -157,20 +158,7 @@
 		<string>OEPCECDButtonMode</string>
 	</array>
 	<key>OENumberOfPlayersKey</key>
-	<integer>2</integer>
-	<key>OERequiredFiles</key>
-	<array>
-		<dict>
-			<key>Description</key>
-			<string>TurboGrafx-CD/PC Engine CD BIOS</string>
-			<key>MD5</key>
-			<string>ff1a674273fe3540ccef576376407d1d</string>
-			<key>Name</key>
-			<string>syscard3.pce</string>
-			<key>Size</key>
-			<string>262656</string>
-		</dict>
-	</array>
+	<integer>5</integer>
 	<key>OEResponderClassKey</key>
 	<string>OEPCECDSystemResponder</string>
 	<key>OESystemIdentifier</key>

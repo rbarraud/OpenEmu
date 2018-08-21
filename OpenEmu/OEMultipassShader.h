@@ -41,5 +41,6 @@ typedef enum
 @property(readonly) NSUInteger numberOfPasses;
 @property(readonly) NSArray *shaders;
 @property(readonly) OENTSCFilterType NTSCFilter;
+@property(readonly) NSArray *lutTextures;
 
 @end

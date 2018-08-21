@@ -24,8 +24,7 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
-#import "OEPopUpButtonCell.h"
+@import Cocoa;
 #import "OEMenu.h"
 #import "OEControl.h"
 #import "OEToolTip.h"
@@ -34,6 +33,7 @@
 {
 @private
     NSTrackingArea *_trackingArea;   // Mouse tracking area used only if the control reacts to the mouse's location
+    CGFloat _cachedIntrinsicWidth;
 }
 
 @property(nonatomic, assign) OEMenuStyle menuStyle;

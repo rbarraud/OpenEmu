@@ -24,7 +24,7 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
+@import Foundation;
 #import "OEPlugin.h"
 
 @class OESystemController;
@@ -36,6 +36,7 @@
 @property(strong, readonly) NSString *systemIdentifier;
 @property(strong, readonly) NSString *systemName;
 @property(strong, readonly) NSImage  *systemIcon;
+@property(readonly)         BOOL     supportsDiscs;
 @property(readonly)         CGFloat  coverAspectRatio;
 @property(strong, readonly) NSImage  *bundleIcon;
 
@@ -43,8 +44,6 @@
 
 + (NSArray *)supportedTypeExtensions;
 - (NSArray *)supportedTypeExtensions;
-+ (NSArray *)requiredFiles;
-- (NSArray *)requiredFiles;
 + (OESystemPlugin *)systemPluginForIdentifier:(NSString *)gameSystemIdentifier;
 + (void)registerGameSystemPlugin:(OESystemPlugin *)plugin forIdentifier:(NSString *)gameSystemIdentifier;
 + (OESystemPlugin *)systemPluginWithBundleAtPath:(NSString *)bundlePath;

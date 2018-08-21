@@ -38,7 +38,6 @@
 
 static NSMutableDictionary *_pluginsBySystemIdentifiers = nil;
 static NSArray *_cachedSupportedTypeExtensions = nil;
-static NSArray *_cachedRequiredFiles = nil;
 
 + (void)initialize
 {
@@ -80,20 +79,6 @@ static NSArray *_cachedRequiredFiles = nil;
     }
 
     return _cachedSupportedTypeExtensions;
-}
-
-+ (NSArray *)requiredFiles;
-{
-    if(_cachedRequiredFiles == nil)
-    {
-        NSMutableArray *files = [[NSMutableArray alloc] init];
-        for(OESystemPlugin *plugin in [OEPlugin pluginsForType:self])
-            if([plugin requiredFiles] != nil) [files addObjectsFromArray:[plugin requiredFiles]];
-        
-        _cachedRequiredFiles = [files copy];
-    }
-    
-    return _cachedRequiredFiles;
 }
 
 + (OESystemPlugin *)systemPluginWithBundleAtPath:(NSString *)bundlePath;
@@ -140,9 +125,9 @@ static NSArray *_cachedRequiredFiles = nil;
     return [[self controller] fileTypes];
 }
 
-- (NSArray *)requiredFiles;
+- (BOOL)supportsDiscs
 {
-    return [[self controller] requiredFiles];
+    return [[self controller] supportsDiscs];
 }
 
 - (CGFloat)coverAspectRatio

@@ -31,14 +31,15 @@
 #import "OEGameViewController.h"
 #import "OEGameView.h"
 #import "OEGameControlsBar.h"
-#import "NSViewController+OEAdditions.h"
-#import "NSWindow+OEFullScreenAdditions.h"
-#import <QuartzCore/QuartzCore.h>
 #import "OEUtilities.h"
 
 #import "OEDBRom.h"
 #import "OEDBGame.h"
-#import "OEDBSystem.h"
+#import "OEDBSystem+CoreDataProperties.h"
+
+@import QuartzCore;
+
+#import "OpenEmu-Swift.h"
 
 #pragma mark - Private variables
 
@@ -102,7 +103,6 @@ typedef enum
 {
     [[self window] setDelegate:nil];
     [self setWindow:nil];
-    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (BOOL)windowShouldClose:(id)sender
@@ -397,7 +397,6 @@ typedef enum
         _OELastWindowSizeKey : NSStringFromSize(windowSize),
     };
     [userDefaults setObject:integralScaleInfo forKey:systemKey];
-    [userDefaults synchronize]; // needed whilst AppKit isn’t fixed to synchronise defaults in -_deallocHardCore:
 
     [gameViewController viewWillDisappear];
     [gameViewController viewDidDisappear];
@@ -442,7 +441,7 @@ typedef enum
 
     [NSCursor hide];
     [[gameViewController controlsWindow] setCanShow:NO];
-    [[gameViewController controlsWindow] hide];
+    [[gameViewController controlsWindow] hideAnimated:YES];
 }
 
 - (NSArray *)customWindowsToEnterFullScreenForWindow:(NSWindow *)window
@@ -516,7 +515,7 @@ typedef enum
     if(_resumePlayingAfterFullScreenTransition)
         [[self document] setEmulationPaused:NO];
 
-    [[gameViewController controlsWindow] hide];
+    [[gameViewController controlsWindow] hideAnimated:YES];
     [[gameViewController controlsWindow] setCanShow:YES];
     [NSCursor unhide];
 }
@@ -532,7 +531,7 @@ typedef enum
     
     [NSCursor hide];
     [[gameViewController controlsWindow] setCanShow:NO];
-    [[gameViewController controlsWindow] hide];
+    [[gameViewController controlsWindow] hideAnimated:YES];
 }
 
 - (NSArray *)customWindowsToExitFullScreenForWindow:(NSWindow *)window
@@ -611,13 +610,10 @@ typedef enum
 
     _fullScreenStatus = _OEPopoutGameWindowFullScreenStatusNonFullScreen;
 
-    [[self window] setAnimationBehavior:NSWindowAnimationBehaviorDocumentWindow];
-    [[self window] makeKeyAndOrderFront:self];
-
     if(_resumePlayingAfterFullScreenTransition)
         [[self document] setEmulationPaused:NO];
 
-    [[gameViewController controlsWindow] hide];
+    [[gameViewController controlsWindow] hideAnimated:YES];
     [[gameViewController controlsWindow] setCanShow:YES];
     [NSCursor unhide];
 }

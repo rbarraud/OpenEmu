@@ -16,7 +16,7 @@
  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
  DISCLAIMED. IN NO EVENT SHALL OpenEmu Team BE LIABLE FOR ANY
- DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES 
  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
   LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
@@ -24,11 +24,23 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
+@import Cocoa;
+@import Quartz;
 #import "OELibrarySubviewController.h"
-#import "OEBlankSlateView.h"
+#import "OECollectionViewController.h"
 
-#import "OEGridView.h"
-@interface OEMediaViewController : NSViewController <OELibrarySubviewController, OEBlankSlateViewDelegate>
-@property (strong) IBOutlet OEGridView *gridView;
+@class OEDBSaveState, OEDBScreenshot;
+
+extern NSString * const OEMediaViewControllerDidSetSelectionIndexesNotification;
+
+@interface OEMediaViewController : OECollectionViewController <OELibrarySubviewController, OEBlankSlateViewDelegate>
+
+@property (readonly) BOOL saveStateMode;
+
+@property (readonly) NSArray <OEDBSaveState *> *selectedSaveStates;
+@property (readonly) NSArray <OEDBScreenshot *> *selectedScreenshots;
+
+- (IBAction)showInFinder:(id)sender;
+- (void)deleteSelectedItems:(id)sender;
+
 @end

@@ -24,34 +24,18 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
-
-
-@protocol OELibrarySplitViewDelegate;
+@import Foundation;
 
 @interface OELibrarySplitView : NSSplitView
 
-- (BOOL)isSidebarVisible;
-- (void)toggleSidebar;
-- (void)setDelegate:(id<OELibrarySplitViewDelegate>)delegate;
+- (void)resetSidebar;
 
 /* Return the splitter position as shown on screen.
    If the sidebar is hidden, return 0.
    If the sidebar is being toggled, return the current splitter position according to the hide/reveal animation.
 */
-- (CGFloat)splitterPosition;
+@property (readonly) CGFloat splitterPosition;
 
 @end
 
-
-@protocol OELibrarySplitViewDelegate <NSSplitViewDelegate>
-@optional
-/* Respond as if the delegate had registered for the OELibrarySplitViewDidToggleSidebarNotification notification.
-   This message is sent after sidebar animation has finished. To receive notifications whilst the sidebar is
-   being toggled, use -splitViewDidResizeSubviews: or the corresponding notification.
-*/
-- (void)librarySplitViewDidToggleSidebar:(NSNotification *)notification;
-@end
-
-
-extern NSString *const OELibrarySplitViewDidToggleSidebarNotification;
+extern NSString *const OELibrarySplitViewResetSidebarNotification;

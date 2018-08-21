@@ -24,23 +24,19 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Cocoa/Cocoa.h>
-
-#import <OpenEmuBase/OpenEmuBase.h>
+@import Cocoa;
 #import "OEGameCoreHelper.h"
-#import "OEGameControlsBar.h"
 
 extern NSString *const OEGameVolumeKey;
 extern NSString *const OEGameDefaultVideoFilterKey;
 extern NSString *const OEGameSystemVideoFilterKeyFormat;
 extern NSString *const OEGameCoresInBackgroundKey;
-extern NSString *const OEDontShowGameTitleInWindowKey;
 extern NSString *const OEAutoSwitchCoreAlertSuppressionKey;
-extern NSString *const OEForceCorePicker;
 extern NSString *const OEGameViewControllerEmulationWillFinishNotification;
 extern NSString *const OEGameViewControllerEmulationDidFinishNotification;
 extern NSString *const OEGameViewControllerROMKey;
 extern NSString *const OEBackgroundPauseKey;
+extern NSString *const OEBackgroundControllerPlayKey;
 extern NSString *const OEGameViewBackgroundColorKey;
 extern NSString *const OETakeNativeScreenshots;
 
@@ -62,7 +58,7 @@ extern NSString *const OEScreenshotPropertiesKey;
 
 @protocol OEGameIntegralScalingDelegate;
 
-@interface OEGameViewController : NSViewController <OEGameCoreDisplayHelper>
+@interface OEGameViewController : NSViewController
 
 #pragma mark -
 
@@ -73,9 +69,12 @@ extern NSString *const OEScreenshotPropertiesKey;
 
 @property(weak) OEGameDocument *document;
 
-- (BOOL)supportsCheats;
-- (NSString *)coreIdentifier;
-- (NSString *)systemIdentifier;
+@property(readonly) BOOL supportsCheats;
+@property(readonly) BOOL supportsSaveStates;
+@property(readonly) BOOL supportsMultipleDiscs;
+@property(readonly) NSUInteger discCount;
+@property(readonly) NSString *coreIdentifier;
+@property(readonly) NSString *systemIdentifier;
 
 - (NSImage *)takeNativeScreenshot;
 
@@ -90,7 +89,12 @@ extern NSString *const OEScreenshotPropertiesKey;
 - (IBAction)takeScreenshot:(id)sender;
 
 #pragma mark - Info
-- (NSSize)defaultScreenSize;
+@property(readonly) NSSize defaultScreenSize;
+
+- (void)setEnableVSync:(BOOL)enable;
+- (void)setAspectSize:(OEIntSize)newAspectSize;
+- (void)setScreenSize:(OEIntSize)newScreenSize withIOSurfaceID:(IOSurfaceID)newSurfaceID;
 - (void)setScreenSize:(OEIntSize)newScreenSize aspectSize:(OEIntSize)newAspectSize withIOSurfaceID:(IOSurfaceID)newSurfaceID;
+- (void)setDiscCount:(NSUInteger)discCount;
 
 @end

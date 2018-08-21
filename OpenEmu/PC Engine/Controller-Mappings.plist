@@ -192,6 +192,25 @@
 		<key>OEPCEButtonSelect</key>
 		<string>OEControllerWiimoteButtonMinus</string>
 	</dict>
+	<key>OEControllerNintendoWiiUProController</key>
+	<dict>
+		<key>OEPCEButtonUp</key>
+		<string>OEControllerNintendoWiiUProControllerDPadUp</string>
+		<key>OEPCEButtonDown</key>
+		<string>OEControllerNintendoWiiUProControllerDPadDown</string>
+		<key>OEPCEButtonLeft</key>
+		<string>OEControllerNintendoWiiUProControllerDPadLeft</string>
+		<key>OEPCEButtonRight</key>
+		<string>OEControllerNintendoWiiUProControllerDPadRight</string>
+		<key>OEPCEButton1</key>
+		<string>OEControllerNintendoWiiUProControllerButtonB</string>
+		<key>OEPCEButton2</key>
+		<string>OEControllerNintendoWiiUProControllerButtonY</string>
+		<key>OEPCEButtonRun</key>
+		<string>OEControllerNintendoWiiUProControllerButtonPlus</string>
+		<key>OEPCEButtonSelect</key>
+		<string>OEControllerNintendoWiiUProControllerButtonMinus</string>
+	</dict>
 	<key>OEControllerSonyPS4Dualshock4</key>
 	<dict>
 		<key>OEPCEButtonUp</key>
@@ -204,6 +223,38 @@
 		<string>OEControllerSonyPS4Dualshock4ButtonOptions</string>
 		<key>OEPCEButtonSelect</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonShare</string>
+	</dict>
+	<key>OEControllerGCExtendedGamepadProfile</key>
+	<dict>
+		<key>OEPCEButtonUp</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadUp</string>
+		<key>OEPCEButtonDown</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadDown</string>
+		<key>OEPCEButtonLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadLeft</string>
+		<key>OEPCEButtonRight</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadRight</string>
+		<key>OEPCEButton1</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonA</string>
+		<key>OEPCEButton2</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonX</string>
+		<key>OEPCEButtonRun</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonHome</string>
+		<key>OEPCEButtonSelect</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL1</string>
+	</dict>
+	<key>OEControllerNintendoSwitchProController</key>
+	<dict>
+		<key>OEPCEButtonUp</key>
+		<string>OEControllerNintendoSwitchProControllerDPadUp</string>
+		<key>OEPCEButton1</key>
+		<string>OEControllerNintendoSwitchProControllerButtonB</string>
+		<key>OEPCEButton2</key>
+		<string>OEControllerNintendoSwitchProControllerButtonY</string>
+		<key>OEPCEButtonRun</key>
+		<string>OEControllerNintendoSwitchProControllerButtonPlus</string>
+		<key>OEPCEButtonSelect</key>
+		<string>OEControllerNintendoSwitchProControllerButtonMinus</string>
 	</dict>
 </dict>
 </plist>

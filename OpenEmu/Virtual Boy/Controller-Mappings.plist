@@ -240,6 +240,29 @@
 		<key>OEVBButtonSelect</key>
 		<string>OEControllerWiimoteButtonMinus</string>
 	</dict>
+	<key>OEControllerNintendoWiiUProController</key>
+	<dict>
+		<key>OEVBButtonLeftUp</key>
+		<string>OEControllerNintendoWiiUProControllerDPadUp</string>
+		<key>OEVBButtonLeftDown</key>
+		<string>OEControllerNintendoWiiUProControllerDPadDown</string>
+		<key>OEVBButtonLeftLeft</key>
+		<string>OEControllerNintendoWiiUProControllerDPadLeft</string>
+		<key>OEVBButtonLeftRight</key>
+		<string>OEControllerNintendoWiiUProControllerDPadRight</string>
+		<key>OEVBButtonA</key>
+		<string>OEControllerNintendoWiiUProControllerButtonA</string>
+		<key>OEVBButtonB</key>
+		<string>OEControllerNintendoWiiUProControllerButtonB</string>
+		<key>OEVBButtonL</key>
+		<string>OEControllerNintendoWiiUProControllerButtonL</string>
+		<key>OEVBButtonR</key>
+		<string>OEControllerNintendoWiiUProControllerButtonR</string>
+		<key>OEVBButtonStart</key>
+		<string>OEControllerNintendoWiiUProControllerButtonPlus</string>
+		<key>OEVBButtonSelect</key>
+		<string>OEControllerNintendoWiiUProControllerButtonMinus</string>
+	</dict>
 	<key>OEControllerSonyPS4Dualshock4</key>
 	<dict>
 		<key>OEVBButtonLeftUp</key>
@@ -256,6 +279,46 @@
 		<string>OEControllerSonyPS4Dualshock4ButtonOptions</string>
 		<key>OEVBButtonSelect</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonShare</string>
+	</dict>
+	<key>OEControllerGCExtendedGamepadProfile</key>
+	<dict>
+		<key>OEVBButtonLeftUp</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadUp</string>
+		<key>OEVBButtonLeftDown</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadDown</string>
+		<key>OEVBButtonLeftLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadLeft</string>
+		<key>OEVBButtonLeftRight</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadRight</string>
+		<key>OEVBButtonA</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonA</string>
+		<key>OEVBButtonB</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonX</string>
+		<key>OEVBButtonL</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL1</string>
+		<key>OEVBButtonR</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonR1</string>
+		<key>OEVBButtonStart</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonHome</string>
+		<key>OEVBButtonSelect</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL2</string>
+	</dict>
+	<key>OEControllerNintendoSwitchProController</key>
+	<dict>
+		<key>OEVBButtonLeftUp</key>
+		<string>OEControllerNintendoSwitchProControllerDPadUp</string>
+		<key>OEVBButtonA</key>
+		<string>OEControllerNintendoSwitchProControllerButtonA</string>
+		<key>OEVBButtonB</key>
+		<string>OEControllerNintendoSwitchProControllerButtonB</string>
+		<key>OEVBButtonL</key>
+		<string>OEControllerNintendoSwitchProControllerButtonL</string>
+		<key>OEVBButtonR</key>
+		<string>OEControllerNintendoSwitchProControllerButtonR</string>
+		<key>OEVBButtonStart</key>
+		<string>OEControllerNintendoSwitchProControllerButtonPlus</string>
+		<key>OEVBButtonSelect</key>
+		<string>OEControllerNintendoSwitchProControllerButtonMinus</string>
 	</dict>
 </dict>
 </plist>

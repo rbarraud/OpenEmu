@@ -25,18 +25,9 @@
  */
 
 #import "OECoreTableButtonCell.h"
-#import "NSImage+OEDrawingAdditions.h"
-@implementation OECoreTableButtonCell
-+ (void)initialize
-{
-    // Make sure not to reinitialize for subclassed objects
-    if (self != [OECoreTableButtonCell class])
-        return;
+#import "OETheme.h"
 
-    NSImage *image = [NSImage imageNamed:@"slim_dark_pill_button"];
-    [image setName:@"slim_dark_pill_button_normal" forSubimageInRect:(NSRect){{0,image.size.height/2},{image.size.width, image.size.height/2}}];
-    [image setName:@"slim_dark_pill_button_pressed" forSubimageInRect:(NSRect){{0,0},{image.size.width, image.size.height/2}}];
-}
+@implementation OECoreTableButtonCell
 
 - (id)init 
 {
@@ -86,12 +77,14 @@
 - (void)drawWithFrame:(NSRect)cellFrame inView:(NSView *)controlView
 {   
     BOOL highlighted = [self isHighlighted];
-    NSImage *image = [NSImage imageNamed:highlighted?@"slim_dark_pill_button_pressed":@"slim_dark_pill_button_normal"];
-    
+
+    OEThemeState state = highlighted ? OEThemeInputStatePressed : OEThemeStateDefault;
+    NSImage *image = [[OETheme sharedTheme] imageForKey:@"slim_dark_pill_button" forState:state];
+
     cellFrame = NSInsetRect(cellFrame, self.widthInset, (cellFrame.size.height-15)/2);
-    
-    [image drawInRect:cellFrame fromRect:NSZeroRect operation:NSCompositeSourceOver fraction:1.0 respectFlipped:YES hints:nil leftBorder:9 rightBorder:9 topBorder:0 bottomBorder:0];
-    
+
+    [image drawInRect:cellFrame fromRect:NSZeroRect operation:NSCompositeSourceOver fraction:1.0 respectFlipped:YES hints:nil];
+
     cellFrame.origin.y += 1;
     
     NSString *label = [self title];
@@ -107,7 +100,7 @@
     if([self isHighlighted])
     {
         textAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
-                                    [[NSFontManager sharedFontManager] fontWithFamily:@"Lucida Grande" traits:0 weight:0.0 size:9.0], NSFontAttributeName,
+                                    [NSFont systemFontOfSize:9], NSFontAttributeName,
                                     [NSColor colorWithDeviceWhite:1.0 alpha:1.0], NSForegroundColorAttributeName,
                                     paraStyle, NSParagraphStyleAttributeName,
                                     shadow, NSShadowAttributeName,
@@ -116,7 +109,7 @@
     else
     {
         textAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
-                          [[NSFontManager sharedFontManager] fontWithFamily:@"Lucida Grande" traits:0 weight:0.0 size:9.0], NSFontAttributeName,
+                          [NSFont systemFontOfSize:9], NSFontAttributeName,
                           [NSColor colorWithDeviceWhite:0.89 alpha:1.0], NSForegroundColorAttributeName,
                           paraStyle, NSParagraphStyleAttributeName,
                           shadow, NSShadowAttributeName,

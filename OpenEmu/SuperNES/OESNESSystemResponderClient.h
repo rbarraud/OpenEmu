@@ -42,12 +42,17 @@ typedef enum _OESNESButton
     OESNESButtonTriggerRight,
     OESNESButtonStart,
     OESNESButtonSelect,
-    OESNESButtonCount,
+    OESNESButtonCount
 } OESNESButton;
 
 @protocol OESNESSystemResponderClient <OESystemResponderClient, NSObject>
 
 - (oneway void)didPushSNESButton:(OESNESButton)button forPlayer:(NSUInteger)player;
 - (oneway void)didReleaseSNESButton:(OESNESButton)button forPlayer:(NSUInteger)player;
+- (oneway void)mouseMovedAtPoint:(OEIntPoint)point;
+- (oneway void)leftMouseDownAtPoint:(OEIntPoint)point;
+- (oneway void)leftMouseUp;
+- (oneway void)rightMouseDownAtPoint:(OEIntPoint)point;
+- (oneway void)rightMouseUp;
 
 @end

@@ -9,7 +9,7 @@
 	<key>CFBundleIconFile</key>
 	<string></string>
 	<key>CFBundleIdentifier</key>
-	<string>org.openemu.${PRODUCT_NAME:rfc1034identifier}</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -25,7 +25,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2012 OpenEmu Team. All rights reserved.</string>
 	<key>NSPrincipalClass</key>
-	<string>OESystemController</string>
+	<string>OE5200SystemController</string>
 	<key>OEControlListKey</key>
 	<array>
 		<array>
@@ -75,7 +75,7 @@
 			</dict>
 			<dict>
 				<key>OEControlListKeyLabelKey</key>
-				<string>Pause</string>
+				<string>Console Pause</string>
 				<key>OEControlListKeyNameKey</key>
 				<string>OE5200ButtonPause</string>
 			</dict>
@@ -83,9 +83,88 @@
 		<array>
 			<dict>
 				<key>OEControlListKeyLabelKey</key>
-				<string>Reset</string>
+				<string>Console Reset</string>
 				<key>OEControlListKeyNameKey</key>
 				<string>OE5200ButtonReset</string>
+			</dict>
+		</array>
+		<array>
+			<string>Keypad</string>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>1</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button1</string>
+			</dict>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>2</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button2</string>
+			</dict>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>3</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button3</string>
+			</dict>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>4</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button4</string>
+			</dict>
+		</array>
+		<array>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>5</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button5</string>
+			</dict>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>6</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button6</string>
+			</dict>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>7</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button7</string>
+			</dict>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>8</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button8</string>
+			</dict>
+		</array>
+		<array>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>9</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button9</string>
+			</dict>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>0</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200Button0</string>
+			</dict>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>*</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200ButtonAsterisk</string>
+			</dict>
+			<dict>
+				<key>OEControlListKeyLabelKey</key>
+				<string>#</string>
+				<key>OEControlListKeyNameKey</key>
+				<string>OE5200ButtonPound</string>
 			</dict>
 		</array>
 	</array>
@@ -115,6 +194,7 @@
 	<key>OEFileSuffixes</key>
 	<array>
 		<string>a52</string>
+		<string>bin</string>
 	</array>
 	<key>OEGenericControlNamesKey</key>
 	<array>
@@ -127,22 +207,21 @@
 		<string>OE5200ButtonStart</string>
 		<string>OE5200ButtonPause</string>
 		<string>OE5200ButtonReset</string>
+		<string>OE5200Button1</string>
+		<string>OE5200Button2</string>
+		<string>OE5200Button3</string>
+		<string>OE5200Button4</string>
+		<string>OE5200Button5</string>
+		<string>OE5200Button6</string>
+		<string>OE5200Button7</string>
+		<string>OE5200Button8</string>
+		<string>OE5200Button9</string>
+		<string>OE5200Button0</string>
+		<string>OE5200ButtonAsterisk</string>
+		<string>OE5200ButtonPound</string>
 	</array>
 	<key>OENumberOfPlayersKey</key>
 	<integer>2</integer>
-	<key>OERequiredFiles</key>
-	<array>
-		<dict>
-			<key>Description</key>
-			<string>Atari 5200 BIOS</string>
-			<key>MD5</key>
-			<string>281f20ea4320404ec820fb7ec0693b38</string>
-			<key>Name</key>
-			<string>5200.rom</string>
-			<key>Size</key>
-			<integer>2048</integer>
-		</dict>
-	</array>
 	<key>OEResponderClassKey</key>
 	<string>OE5200SystemResponder</string>
 	<key>OESystemIcon</key>

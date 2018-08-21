@@ -24,6 +24,8 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef CG_SUPPORT
+
 #import "OECGShader.h"
 #import "OEShaderPlugin.h"
 #import "OEGameShader_ForSubclassEyesOnly.h"
@@ -61,7 +63,7 @@
             NSLog(@"%@: Couldn't get valid profile", [self shaderName]);
         cgGLSetOptimalOptions(_vertexProfile);
 
-        _vertexProgram = cgCreateProgramFromFile(_cgContext, CG_SOURCE, [[self filePath] UTF8String], _vertexProfile, "main_vertex", 0);
+        _vertexProgram = cgCreateProgramFromFile(_cgContext, CG_SOURCE, self.filePath.fileSystemRepresentation, _vertexProfile, "main_vertex", 0);
         if(_vertexProgram == NULL)
         {
             [self OE_logCgErrorWithProfile:_vertexProfile];
@@ -114,7 +116,7 @@
             NSLog(@"%@: Couldn't get valid profile", [self shaderName]);
         cgGLSetOptimalOptions(_fragmentProfile);
 
-        _fragmentProgram = cgCreateProgramFromFile(_cgContext, CG_SOURCE, [[self filePath] UTF8String], _fragmentProfile, "main_fragment", 0);
+        _fragmentProgram = cgCreateProgramFromFile(_cgContext, CG_SOURCE, self.filePath.fileSystemRepresentation, _fragmentProfile, "main_fragment", 0);
         if(_fragmentProgram == NULL)
         {
             [self OE_logCgErrorWithProfile:_fragmentProfile];
@@ -158,6 +160,12 @@
             _fragmentPreviousTextureVideoSizes[i]   = [self fragmentParameterWithName:[[NSString stringWithFormat:@"PREV%lu.video_size", i] UTF8String]];
         }
 
+        _fragmentLUTTextures                        = (CGparameter *) malloc(sizeof(CGparameter) * [_lutTextures count]);
+        for(NSUInteger i = 0; i < [_lutTextures count]; ++i)
+        {
+            _fragmentLUTTextures[i]                    = [self fragmentParameterWithName:[_lutTextures[i] UTF8String]];
+        }
+
         [self setCompiled:YES];
     }
 }
@@ -184,6 +192,7 @@
         free(_fragmentPreviousTextures);
         free(_fragmentPreviousTextureSizes);
         free(_fragmentPreviousTextureVideoSizes);
+        free(_fragmentLUTTextures);
     }
 }
 
@@ -198,3 +207,5 @@
 }
 
 @end
+
+#endif

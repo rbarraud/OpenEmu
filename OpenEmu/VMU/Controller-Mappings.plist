@@ -224,5 +224,37 @@
 		<key>OEVMUButtonMode</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonShare</string>
 	</dict>
+	<key>OEControllerGCExtendedGamepadProfile</key>
+	<dict>
+		<key>OEVMUButtonUp</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadUp</string>
+		<key>OEVMUButtonDown</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadDown</string>
+		<key>OEVMUButtonLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadLeft</string>
+		<key>OEVMUButtonRight</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadRight</string>
+		<key>OEVMUButtonB</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonA</string>
+		<key>OEVMUButtonA</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonX</string>
+		<key>OEVMUButtonSleep</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonHome</string>
+		<key>OEVMUButtonMode</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL1</string>
+	</dict>
+	<key>OEControllerNintendoSwitchProController</key>
+	<dict>
+		<key>OEVMUButtonUp</key>
+		<string>OEControllerNintendoSwitchProControllerDPadUp</string>
+		<key>OEVMUButtonB</key>
+		<string>OEControllerNintendoSwitchProControllerButtonB</string>
+		<key>OEVMUButtonA</key>
+		<string>OEControllerNintendoSwitchProControllerButtonY</string>
+		<key>OEVMUButtonSleep</key>
+		<string>OEControllerNintendoSwitchProControllerButtonPlus</string>
+		<key>OEVMUButtonMode</key>
+		<string>OEControllerNintendoSwitchProControllerButtonMinus</string>
+	</dict>
 </dict>
 </plist>

@@ -54,34 +54,38 @@
     return image;
 }
 
-- (OECanHandleState)canHandleFile:(NSString *)path
+- (OEFileSupport)canHandleFile:(__kindof OEFile *)file
 {
-    OECUESheet *cueSheet = [[OECUESheet alloc] initWithPath:path];
-    NSString *dataTrack = [cueSheet dataTrackPath];
+    OECDSheet *sheet = file;
+    if (![sheet isKindOfClass:[OECloneCD class]] && ![sheet isKindOfClass:[OECUESheet class]])
+        return OEFileSupportNo;
 
-    NSString *dataTrackPath = [[path stringByDeletingLastPathComponent] stringByAppendingPathComponent:dataTrack];
-    NSLog(@"PCE-CD data track path: %@", dataTrackPath);
-
-    BOOL handleFileExtension = [super canHandleFileExtension:[path pathExtension]];
-    OECanHandleState canHandleFile = OECanHandleNo;
-
-    if(handleFileExtension)
+    for(NSURL *dataTrackURL in sheet.referencedBinaryFileURLs)
     {
         NSError *error = nil;
-        NSData *dataTrackBuffer = [NSData dataWithContentsOfFile:dataTrackPath options:NSDataReadingMappedIfSafe | NSDataReadingUncached error:&error];
+        NSData *dataTrackBuffer = [NSData dataWithContentsOfURL:dataTrackURL options:NSDataReadingMappedIfSafe | NSDataReadingUncached error:&error];
 
-        NSString* dataTrackString = @"PC Engine CD-ROM SYSTEM";
-        NSData* dataSearch = [dataTrackString dataUsingEncoding:NSUTF8StringEncoding];
+        NSString *dataTrackString = @"PC Engine CD-ROM SYSTEM";
+        NSData *dataSearch = [dataTrackString dataUsingEncoding:NSUTF8StringEncoding];
         // this still slows import down but we need to scan the disc as there's no common offset
         NSRange indexOfData = [dataTrackBuffer rangeOfData: dataSearch options:0 range:NSMakeRange(0, [dataTrackBuffer length])];
 
-        if(indexOfData.length > 0)
-        {
-            NSLog (@"'%@' at offset = 0x%lX", dataTrackString, indexOfData.location);
-            canHandleFile = OECanHandleYes;
-        }
+        if(indexOfData.length == 0)
+            continue;
+
+        // "Battle Heat" for PC-FX is falsely identified as PCE CD. This should be the only game that needs this.
+        NSData *subData = [dataTrackBuffer subdataWithRange:NSMakeRange(indexOfData.location + 74, 11)];
+        NSData *subDataString = [NSData dataWithBytes:"Battle Heat" length:11];
+
+        if([subData isEqualToData:subDataString])
+            return OEFileSupportNo;
+
+        NSLog(@"PCE-CD data track: %@", dataTrackURL);
+        NSLog (@"'%@' at offset = 0x%lX", dataTrackString, indexOfData.location);
+        return OEFileSupportYes;
     }
-    return canHandleFile;
+
+    return OEFileSupportNo;
 }
 
 @end

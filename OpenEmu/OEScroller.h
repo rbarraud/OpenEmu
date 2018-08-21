@@ -24,7 +24,17 @@
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#import <Foundation/Foundation.h>
-@interface OEScroller : NSScroller
+@import Foundation;
+#import "OEControl.h"
+#import "OEThemeObject.h"
+
+@interface OEScroller : NSScroller <OEControl>
+- (void)setThemeKey:(NSString *)key;
+- (void)setBackgroundThemeImageKey:(NSString *)key;
+- (void)setThemeImageKey:(NSString *)key;
+- (void)setThemeTextAttributesKey:(NSString *)key;
+
+@property (nonatomic, readonly) OEThemeState stateMask;
+
 @property BOOL isVertical;
 @end

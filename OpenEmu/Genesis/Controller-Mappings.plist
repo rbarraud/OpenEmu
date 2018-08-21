@@ -330,5 +330,53 @@
 		<key>OEGenesisButtonMode</key>
 		<string>OEControllerSonyPS4Dualshock4ButtonShare</string>
 	</dict>
+	<key>OEControllerGCExtendedGamepadProfile</key>
+	<dict>
+		<key>OEGenesisButtonUp</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadUp</string>
+		<key>OEGenesisButtonDown</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadDown</string>
+		<key>OEGenesisButtonLeft</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadLeft</string>
+		<key>OEGenesisButtonRight</key>
+		<string>OEControllerGCExtendedGamepadProfileDPadRight</string>
+		<key>OEGenesisButtonA</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonX</string>
+		<key>OEGenesisButtonB</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonY</string>
+		<key>OEGenesisButtonC</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonB</string>
+		<key>OEGenesisButtonX</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonA</string>
+		<key>OEGenesisButtonY</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL1</string>
+		<key>OEGenesisButtonZ</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonR2</string>
+		<key>OEGenesisButtonStart</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonHome</string>
+		<key>OEGenesisButtonMode</key>
+		<string>OEControllerGCExtendedGamepadProfileButtonL2</string>
+	</dict>
+	<key>OEControllerNintendoSwitchProController</key>
+	<dict>
+		<key>OEGenesisButtonUp</key>
+		<string>OEControllerNintendoSwitchProControllerDPadUp</string>
+		<key>OEGenesisButtonA</key>
+		<string>OEControllerNintendoSwitchProControllerButtonY</string>
+		<key>OEGenesisButtonB</key>
+		<string>OEControllerNintendoSwitchProControllerButtonB</string>
+		<key>OEGenesisButtonC</key>
+		<string>OEControllerNintendoSwitchProControllerButtonA</string>
+		<key>OEGenesisButtonX</key>
+		<string>OEControllerNintendoSwitchProControllerButtonX</string>
+		<key>OEGenesisButtonY</key>
+		<string>OEControllerNintendoSwitchProControllerButtonL</string>
+		<key>OEGenesisButtonZ</key>
+		<string>OEControllerNintendoSwitchProControllerButtonR</string>
+		<key>OEGenesisButtonStart</key>
+		<string>OEControllerNintendoSwitchProControllerButtonPlus</string>
+		<key>OEGenesisButtonMode</key>
+		<string>OEControllerNintendoSwitchProControllerButtonMinus</string>
+	</dict>
 </dict>
 </plist>

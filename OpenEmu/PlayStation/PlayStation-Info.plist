@@ -9,7 +9,7 @@
 	<key>CFBundleIconFile</key>
 	<string></string>
 	<key>CFBundleIdentifier</key>
-	<string>org.openemu.${PRODUCT_NAME:rfc1034identifier}</string>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -120,35 +120,27 @@
 		<array>
 			<dict>
 				<key>OEControlListKeyLabelKey</key>
-				<string>△ </string>
+				<string>△</string>
 				<key>OEControlListKeyNameKey</key>
 				<string>OEPSXButtonTriangle</string>
-				<key>OEControlListKeyFontFamilyKey</key>
-				<string>Apple LiGothic</string>
 			</dict>
 			<dict>
 				<key>OEControlListKeyLabelKey</key>
-				<string>○ </string>
+				<string>◯</string>
 				<key>OEControlListKeyNameKey</key>
 				<string>OEPSXButtonCircle</string>
-				<key>OEControlListKeyFontFamilyKey</key>
-				<string>Apple LiGothic</string>
 			</dict>
 			<dict>
 				<key>OEControlListKeyLabelKey</key>
-				<string>✕ </string>
+				<string>✕</string>
 				<key>OEControlListKeyNameKey</key>
 				<string>OEPSXButtonCross</string>
-				<key>OEControlListKeyFontFamilyKey</key>
-				<string>Apple LiGothic</string>
 			</dict>
 			<dict>
 				<key>OEControlListKeyLabelKey</key>
-				<string>□ </string>
+				<string>▢</string>
 				<key>OEControlListKeyNameKey</key>
 				<string>OEPSXButtonSquare</string>
-				<key>OEControlListKeyFontFamilyKey</key>
-				<string>Apple LiGothic</string>
 			</dict>
 		</array>
 		<array>
@@ -257,6 +249,8 @@
 	<key>OEFileSuffixes</key>
 	<array>
 		<string>cue</string>
+		<string>ccd</string>
+		<string>m3u</string>
 	</array>
 	<key>OEGenericControlNamesKey</key>
 	<array>
@@ -287,40 +281,7 @@
 		<string>OEPSXRightAnalogRight</string>
 	</array>
 	<key>OENumberOfPlayersKey</key>
-	<integer>4</integer>
-	<key>OERequiredFiles</key>
-	<array>
-		<dict>
-			<key>Description</key>
-			<string>PlayStation (JP) SCPH-5500 BIOS</string>
-			<key>MD5</key>
-			<string>8dd7d5296a650fac7319bce665a6a53c</string>
-			<key>Name</key>
-			<string>scph5500.bin</string>
-			<key>Size</key>
-			<integer>524288</integer>
-		</dict>
-		<dict>
-			<key>Description</key>
-			<string>PlayStation (NA) SCPH-5501 BIOS</string>
-			<key>MD5</key>
-			<string>490f666e1afb15b7362b406ed1cea246</string>
-			<key>Name</key>
-			<string>scph5501.bin</string>
-			<key>Size</key>
-			<integer>524288</integer>
-		</dict>
-		<dict>
-			<key>Description</key>
-			<string>PlayStation (EU) SCPH-5502 BIOS</string>
-			<key>MD5</key>
-			<string>32736f17079d0b2b7024407c39bd3050</string>
-			<key>Name</key>
-			<string>scph5502.bin</string>
-			<key>Size</key>
-			<integer>524288</integer>
-		</dict>
-	</array>
+	<integer>8</integer>
 	<key>OEResponderClassKey</key>
 	<string>OEPSXSystemResponder</string>
 	<key>OESystemIcon</key>
